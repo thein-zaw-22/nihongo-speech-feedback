@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head><title>Whisper Feedback POC</title>
+<style>
+  body {
+    font-family: sans-serif;
+    background: #f0f2f5;
+    padding: 2rem;
+    margin: 0;
+  }
+  .container {
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    max-width: 480px;
+    margin: 2rem auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+  }
+  .btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    margin: 0.5rem;
+    border: none;
+    border-radius: 4px;
+    background: #007bff;
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+  }
+  audio {
+    margin-top: 1rem;
+    width: 100%;
+    display: none;
+    border-radius: 4px;
+  }
+  .instructions {
+    margin-bottom: 1rem;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI-Powered Japanese Speaking Feedback - POC</h1>
+    <p class="instructions">Record your Japanese sentence or upload an audio file, then submit for analysis.</p>
+    <form id="audio-form" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="file" id="fileInput" name="audio_file" accept="audio/*" style="display:none;">
+
+      <button type="button" id="record" class="btn">Record</button>
+      <button type="button" id="stop" class="btn" disabled>Stop</button>
+      <button type="button" id="upload" class="btn">Upload File</button>
+
+      <audio id="audioPlayback" controls></audio>
+
+      <div>
+        <button type="submit" id="submitBtn" class="btn" disabled>Submit for Analysis</button>
+      </div>
+    </form>
+  </div>
+<script>
+  const recordBtn = document.getElementById('record');
+  const stopBtn = document.getElementById('stop');
+  const submitBtn = document.getElementById('submitBtn');
+  const fileInput = document.getElementById('fileInput');
+  const audioPlayback = document.getElementById('audioPlayback');
+  let mediaRecorder, chunks = [];
+
+  recordBtn.addEventListener('click', async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    chunks = [];
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      audioPlayback.src = url;
+      audioPlayback.style.display = 'block';
+      // Populate file input
+      const file = new File([blob], 'recording.webm', { type: 'audio/webm' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      submitBtn.disabled = false;
+    };
+    mediaRecorder.start();
+    recordBtn.disabled = true;
+    stopBtn.disabled = false;
+  });
+
+  stopBtn.addEventListener('click', () => {
+    mediaRecorder.stop();
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+  });
+
+  const uploadBtn = document.getElementById('upload');
+
+  // Trigger file chooser on upload button click
+  uploadBtn.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  // Handle file selection from file input
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    audioPlayback.src = url;
+    audioPlayback.style.display = 'block';
+    submitBtn.disabled = false;
+  });
+</script>
+</body>
+</html>

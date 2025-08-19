@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Feedback Result</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f2f5; padding: 2rem; margin: 0; }
+    .container { background: #fff; padding: 2rem; border-radius: 8px; max-width: 800px; margin: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    audio { width: 100%; border-radius: 4px; margin-bottom: 1.5rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .panel { background: #fafafa; padding: 1rem; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    .panel h3 { margin-top: 0; color: #333; }
+    textarea { width: 100%; border: none; background: transparent; resize: none; font-size: 1rem; color: #444; line-height: 1.4; padding: 0.5rem; min-height: 120px; }
+    p { font-size: 1rem; color: #444; line-height: 1.5; }
+    .explanations { list-style: none; padding: 0; margin-top: 1rem; text-align: left; }
+    .explanations li { margin-bottom: 1rem; }
+    .explanations .orig { color: #d9534f; text-decoration: line-through; margin-right: 0.5rem; }
+    .explanations .corr { color: #5cb85c; font-weight: bold; }
+    .explanations .exp { margin: 0.25rem 0 0 1.5rem; color: #666; font-size: 0.9rem; }
+    .btn { margin-top: 1.5rem; padding: 0.5rem 1rem; border: none; border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
+    .btn:hover { background: #0056b3; }
+    .toggle-btn { margin-top: 1rem; }
+    .log-box { display: none; background: #222; color: #0f0; padding: 1rem; border-radius: 4px; font-family: monospace; font-size: 0.9rem; max-height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Audio Playback -->
+    <audio controls src="{{ result.audio_file.url }}"></audio>
+
+    <!-- Two-column result display -->
+    <div class="grid">
+      <!-- Transcribed Text -->
+      <div class="panel">
+        <h3>Transcribed Text</h3>
+        <textarea readonly>{{ result.transcript }}</textarea>
+      </div>
+      <!-- Corrected Version + Explanations -->
+      <div class="panel">
+        <h3>Corrected Version</h3>
+        <p>{{ result.feedback.corrected_text }}</p>
+
+        <h3>Explanation</h3>
+        <ul class="explanations">
+          {% if result.feedback.corrections %}
+            {% for item in result.feedback.corrections %}
+            <li>
+              <span class="orig">{{ item.original }}</span>
+              <span class="corr">{{ item.corrected }}</span>
+              <p class="exp">{{ item.explanation }}</p>
+            </li>
+            {% endfor %}
+          {% else %}
+            <li><em>No corrections needed. Your sentence looks great!</em></li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Debug Logs -->
+    {% if logs %}
+      <button type="button" id="toggleLogs" class="btn toggle-btn">Show Debug Logs</button>
+      <pre id="logBox" class="log-box">{% for line in logs %}{{ line }}
+{% endfor %}</pre>
+    {% endif %}
+
+    <button onclick="window.location.href='/'" class="btn">Analyze Another</button>
+  </div>
+
+  <script>
+    const toggleBtn = document.getElementById('toggleLogs');
+    const logBox = document.getElementById('logBox');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => {
+        const visible = logBox.style.display === 'block';
+        logBox.style.display = visible ? 'none' : 'block';
+        toggleBtn.textContent = visible ? 'Show Debug Logs' : 'Hide Debug Logs';
+      });
+    }
+  </script>
+</body>
+</html>
