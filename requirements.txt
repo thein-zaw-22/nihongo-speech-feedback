@@ -5,3 +5,4 @@ openai-whisper
 pydub
 ffmpeg-python
 python-dotenv
+boto3
