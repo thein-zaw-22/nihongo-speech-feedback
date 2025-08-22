@@ -1,6 +1,7 @@
 import os
 import json
 import whisper
+import boto3
 from openai import OpenAI
 import logging
 from logging import Formatter
@@ -12,10 +13,85 @@ import tempfile
 # Configure logger
 logger = logging.getLogger(__name__)
 
+# --- LLM Provider Configuration ---
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+logger.info("Using LLM provider: %s", LLM_PROVIDER)
+
+llm_client = None
+if LLM_PROVIDER == "openai":
+    llm_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+elif LLM_PROVIDER == "bedrock":
+    aws_region = os.getenv("AWS_REGION_NAME", "us-east-1")
+    llm_client = boto3.client(
+        "bedrock-runtime",
+        region_name=aws_region,
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+else:
+    raise ValueError(f"Unsupported LLM provider: {LLM_PROVIDER}")
+# --------------------------------
+
 # Load the local Whisper model
 model = whisper.load_model("base")
-# Initialize OpenAI client (gpt-4o-mini)
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+def get_openai_feedback(transcript_text):
+    """Gets feedback from OpenAI's GPT model."""
+    messages = [
+        {"role": "system", "content": (
+            "You are a professional Japanese language tutor. "
+            "Always correct unnatural or grammatical but awkward phrasing to the most natural Japanese usage. "
+            "When I send a Japanese sentence, respond with only a JSON object with two keys: `corrected_text` and `corrections`. "
+            "`corrected_text` must be the full corrected sentence. "
+            "`corrections` must be an array of objects with `original`, `corrected`, and `explanation` fields. "
+            "If the sentence is already the most natural usage, return it unchanged in `corrected_text` and an empty `corrections` array. "
+            "Do not include extra text, markdown, or formatting. explanation should be English and concise. "
+            "Example: {\"corrected_text\": \"水を飲みました。\", \"corrections\": "
+            "[{\"original\": \"水は飲みました。\", \"corrected\": \"水を飲みました。\", "
+            "\"explanation\": \"Use 'を' for the direct object instead of topic particle 'は'\"}]}"
+        )},
+        {"role": "user", "content": transcript_text}
+    ]
+    logger.debug("Sending messages to OpenAI: %s", messages)
+    response = llm_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages
+    )
+    return response.choices[0].message.content
+
+def get_bedrock_feedback(transcript_text):
+    """Gets feedback from Amazon Bedrock using the Converse API."""
+    system_prompt = (
+        "You are a professional Japanese language tutor. "
+        "Your task is to correct Japanese sentences to be more natural. "
+        "Respond with ONLY a valid JSON object containing `corrected_text` and `corrections` keys. "
+        "`corrected_text` should be the full, corrected sentence. "
+        "`corrections` should be an array of objects, each with `original`, `corrected`, and `explanation` fields. "
+        "The explanation must be concise and in English. If no correction is needed, return the original text and an empty array. "
+        "Do not add any text before or after the JSON object."
+    )
+    messages = [{"role": "user", "content": transcript_text}]
+
+    logger.debug("Sending messages to Bedrock (amazon.nova-lite-v1:0): %s", messages)
+    response = llm_client.converse(
+        modelId="amazon.nova-lite-v1:0",
+        messages=messages,
+        system=[{"text": system_prompt}],
+        inferenceConfig={"maxTokens": 2048, "temperature": 0.5}
+    )
+
+    raw_response = response['output']['message']['content'][0]['text']
+    logger.debug("Raw feedback from Bedrock: %s", raw_response)
+    return raw_response
+
+def get_llm_feedback(transcript_text):
+    """Dispatches to the configured LLM provider."""
+    if LLM_PROVIDER == "openai":
+        return get_openai_feedback(transcript_text)
+    elif LLM_PROVIDER == "bedrock":
+        return get_bedrock_feedback(transcript_text)
+    # This should not be reached due to the initial check
+    raise ValueError(f"Unsupported LLM provider: {LLM_PROVIDER}")
 
 def index(request):
     # Capture debug logs for this request
@@ -52,31 +128,8 @@ def index(request):
                     sentence = result.get('text', '')
                     logger.debug("Transcribed sentence: %s", sentence)
 
-                    # Prepare GPT messages for structured JSON feedback
-                    messages = [
-                        {"role": "system", "content": (
-                            "You are a professional Japanese language tutor. "
-                            "Always correct unnatural or grammatical but awkward phrasing to the most natural Japanese usage. "
-                            "When I send a Japanese sentence, respond with only a JSON object with two keys: `corrected_text` and `corrections`. "
-                            "`corrected_text` must be the full corrected sentence. "
-                            "`corrections` must be an array of objects with `original`, `corrected`, and `explanation` fields. "
-                            "If the sentence is already the most natural usage, return it unchanged in `corrected_text` and an empty `corrections` array. "
-                            "Do not include extra text, markdown, or formatting. explanation should be English and concise. "
-                            "Example: {\"corrected_text\": \"水を飲みました。\", \"corrections\": "
-                            "[{\"original\": \"水は飲みました。\", \"corrected\": \"水を飲みました。\", "
-                            "\"explanation\": \"Use 'を' for the direct object instead of topic particle 'は'\"}]}"
-                        )},
-                        {"role": "user", "content": sentence}
-                    ]
-                    logger.debug("Sending messages to OpenAI: %s", messages)
-
-                    # Call OpenAI GPT-4o-mini
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=messages
-                    )
-                    raw = response.choices[0].message.content
-                    logger.debug("Raw feedback from OpenAI: %s", raw)
+                    # Get feedback from the configured LLM provider
+                    raw = get_llm_feedback(sentence)
 
                     # Parse JSON feedback (with fallback to clean JSON substring)
                     try:
