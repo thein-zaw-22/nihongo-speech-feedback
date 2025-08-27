@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from django.views.generic import RedirectView
-from core.views import home, index, signup, feedback, history, flashcard, pronunciation, grammar_game
+from core.views import home, index, signup, feedback, history, flashcard, pronunciation, grammar_game, grammar_play, grammar_submit, grammar_explain, grammar_history
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -16,6 +16,10 @@ urlpatterns = [
     path('flashcard/', flashcard, name='flashcard'),
     path('pronunciation/', pronunciation, name='pronunciation'),
     path('grammar-game/', grammar_game, name='grammar_game'),
+    path('grammar-game/play', grammar_play, name='grammar_play'),
+    path('grammar-game/submit', grammar_submit, name='grammar_submit'),
+    path('grammar-game/explain', grammar_explain, name='grammar_explain'),
+    path('grammar-game/history', grammar_history, name='grammar_history'),
     # Auth
     path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),

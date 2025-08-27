@@ -1,0 +1,27 @@
+{% extends 'admin/base_site.html' %}
+{% block content %}
+  <h1>Import Grammar Questions</h1>
+  <p>Upload a CSV or JSON file.</p>
+  <div class="module">
+    <form method="post" enctype="multipart/form-data" style="padding:1rem;">
+      {% csrf_token %}
+      <input type="file" name="file" accept=".csv,.json" required>
+      <button type="submit" class="default">Import</button>
+    </form>
+  </div>
+  <h3>CSV Format</h3>
+  <pre>jlpt_level,category,prompt,choices,correct,explanation,is_active
+N5,particle,「__」に本を置きます。,に|で|を,0,Use に to mark location of placement,1
+N4,verb_form,昨日__映画を見た。,は|が|に,1,Use が with the subject in informal past.,1</pre>
+  <h3>JSON Format</h3>
+  <pre>[{
+  "jlpt_level":"N5",
+  "category":"particle",
+  "prompt":"「__」に本を置きます。",
+  "explanation":"Use に to mark location of placement",
+  "is_active":true,
+  "choices":[{"text":"に","is_correct":true},{"text":"で"},{"text":"を"}]
+}]
+  </pre>
+{% endblock %}
+

@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block title %}Grammar Game History{% endblock %}
+{% block content %}
+<style>
+  .filter { display:flex; gap:.5rem; align-items:end; margin-bottom:.75rem; flex-wrap: wrap; }
+  .field { display:flex; flex-direction:column; gap:.25rem; }
+  .select { padding:.5rem .6rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); }
+  .list { display:grid; gap:.6rem; }
+  .item { padding:.75rem; border:1px solid var(--border-color); border-radius:12px; background: var(--bg-secondary); display:flex; gap:1rem; justify-content:space-between; align-items:center; }
+  .pill { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:9999px; background: rgba(102,126,234,.12); color: var(--brand); border:1px solid rgba(102,126,234,.25); font-size:.75rem; font-weight:600; }
+  .muted { color: var(--text-secondary); }
+</style>
+
+<h1 style="margin-bottom:.5rem;">Grammar Game History</h1>
+<form method="get" class="filter">
+  <div class="field">
+    <label>JLPT</label>
+    <select class="select" name="level">
+      <option value="">All</option>
+      {% for lv in 'N5,N4,N3,N2,N1'.split(',') %}
+        <option value="{{ lv }}" {% if filter_level == lv %}selected{% endif %}>{{ lv }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>Category</label>
+    <select class="select" name="category">
+      <option value="">All</option>
+      <option value="particle" {% if filter_category == 'particle' %}selected{% endif %}>Particles</option>
+      <option value="verb_form" {% if filter_category == 'verb_form' %}selected{% endif %}>Verb Forms</option>
+      <option value="politeness" {% if filter_category == 'politeness' %}selected{% endif %}>Politeness</option>
+      <option value="word_order" {% if filter_category == 'word_order' %}selected{% endif %}>Word Order</option>
+      <option value="vocab" {% if filter_category == 'vocab' %}selected{% endif %}>Vocabulary</option>
+    </select>
+  </div>
+  <div class="field" style="gap:.4rem;">
+    <label style="visibility:hidden;">Apply</label>
+    <div style="display:flex; gap:.5rem;">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-secondary" href="{% url 'grammar_history' %}">Clear</a>
+    </div>
+  </div>
+</form>
+
+{% if best %}
+  <div class="item" style="border-color: rgba(72,187,120,.25);">
+    <div>
+      <div class="muted">Best Streak</div>
+      <div>Streak: <strong>{{ best.details.best_streak|default:0 }}</strong> • Score: <strong>{{ best.correct }}</strong>/<strong>{{ best.total_questions }}</strong></div>
+    </div>
+    <div>
+      <span class="pill">{{ best.jlpt_level }}</span>
+      <span class="pill">{{ best.category|title }}</span>
+    </div>
+  </div>
+{% endif %}
+
+{% if items %}
+  <div class="list">
+    {% for it in items %}
+      <div class="item">
+        <div>
+          <div class="muted">{{ it.created_at|date:"Y-m-d H:i" }}</div>
+          <div>Score: <strong>{{ it.correct }}</strong>/<strong>{{ it.total_questions }}</strong> • Duration: <strong>{{ it.duration_seconds }}</strong>s • Best streak: <strong>{{ it.details.best_streak|default:0 }}</strong></div>
+        </div>
+        <div>
+          <span class="pill">{{ it.jlpt_level }}</span>
+          <span class="pill">{{ it.category|title }}</span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="item">No sessions found.</div>
+{% endif %}
+{% endblock %}
+

@@ -16,6 +16,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login as auth_login
 from .forms import AudioUploadForm
 from .models import Transcription
+from .models import GrammarQuestion, GrammarChoice, GrammarGameSession
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -377,6 +378,108 @@ def pronunciation(request):
 def grammar_game(request):
     # Placeholder page for Grammar Game
     return render(request, 'grammar_game.html')
+
+
+@login_required
+def grammar_play(request):
+    # Returns JSON set of questions for selected level/category
+    level = request.GET.get('level', 'N5')
+    category = request.GET.get('category', 'particle')
+    try:
+        n = max(1, min(int(request.GET.get('n', '10')), 30))
+    except Exception:
+        n = 10
+    qs = GrammarQuestion.objects.filter(jlpt_level=level, category=category, is_active=True).order_by('?')[:n]
+    items = []
+    for q in qs:
+        choices = list(q.choices.all().values('text', 'is_correct'))
+        items.append({
+            'id': q.id,
+            'prompt': q.prompt,
+            'explanation': q.explanation,
+            'jlpt_level': q.jlpt_level,
+            'category': q.category,
+            'choices': choices,
+        })
+    from django.http import JsonResponse
+    return JsonResponse({'items': items})
+
+
+@login_required
+def grammar_submit(request):
+    # Save session results (AJAX)
+    from django.http import JsonResponse
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        level = payload.get('level', 'N5')
+        category = payload.get('category', 'particle')
+        total = int(payload.get('total', 0))
+        correct = int(payload.get('correct', 0))
+        duration = int(payload.get('duration', 0))
+        best_streak = int(payload.get('best_streak', 0))
+        timer_enabled = bool(payload.get('timer_enabled', False))
+        detail_data = {
+            'best_streak': best_streak,
+            'timer_enabled': timer_enabled,
+        }
+        GrammarGameSession.objects.create(
+            user=request.user,
+            jlpt_level=level,
+            category=category,
+            total_questions=total,
+            correct=correct,
+            duration_seconds=duration,
+            details=detail_data
+        )
+        return JsonResponse({'ok': True})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+def grammar_explain(request):
+    from django.http import JsonResponse
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        prompt = payload.get('prompt', '')
+        level = payload.get('level', '')
+        category = payload.get('category', '')
+        user_answer = payload.get('user_answer', '')
+        correct_text = payload.get('correct_text', '')
+        context = f"JLPT {level}, category {category}.\nQuestion: {prompt}\nUser answer: {user_answer}\nCorrect: {correct_text}.\nExplain briefly why the correct answer is natural and the user answer is not, in English."
+        # Reuse primary LLM with concise instruction
+        try:
+            raw = get_llm_feedback(context)
+            # If LLM returns JSON by our system prompt, fallback to raw text
+            try:
+                obj = json.loads(raw)
+                text = obj.get('corrected_text') or raw
+            except Exception:
+                text = raw
+        except Exception as e:
+            text = f"Explanation unavailable: {e}"
+        return JsonResponse({'ok': True, 'explanation': text})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+def grammar_history(request):
+    # Filter per-user sessions
+    qs = GrammarGameSession.objects.filter(user=request.user).order_by('-created_at')
+    level = request.GET.get('level')
+    category = request.GET.get('category')
+    if level:
+        qs = qs.filter(jlpt_level=level)
+    if category:
+        qs = qs.filter(category=category)
+    best = qs.order_by('-details__best_streak', '-correct').first()
+    return render(request, 'grammar_history.html', {
+        'items': qs,
+        'filter_level': level or '',
+        'filter_category': category or '',
+        'best': best,
+    })
 
 
 def signup(request):

@@ -2,19 +2,236 @@
 {% block title %}Grammar Game{% endblock %}
 {% block content %}
 <style>
-  .box { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; }
+  .panel { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; margin-bottom: .75rem; }
+  .controls { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+  .select, .input { padding:.5rem .6rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.6rem .9rem; border:none; border-radius:10px; font-weight:700; cursor:pointer; text-decoration:none; }
+  .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; }
+  .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
+  .pill { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:9999px; background: rgba(102,126,234,.12); color: var(--brand); border:1px solid rgba(102,126,234,.25); font-size:.75rem; font-weight:600; }
+  .question { font-size:1.05rem; margin:.5rem 0; }
+  .choices { display:grid; gap:.5rem; }
+  .choice { padding:.6rem .8rem; border:1px solid var(--border-color); border-radius:10px; cursor:pointer; background: var(--bg-primary); }
+  .choice:hover { background: rgba(102,126,234,.08); }
+  .choice.correct { border-color:#34d399; background: rgba(52,211,153,.12); }
+  .choice.wrong { border-color:#f87171; background: rgba(248,113,113,.12); }
+  .progress { height:8px; border-radius:9999px; background: rgba(102,126,234,.12); overflow:hidden; }
+  .bar { height:100%; width:0; background: linear-gradient(135deg, var(--brand), var(--brand-2)); transition: width .2s ease; }
   .muted { color: var(--text-secondary); }
+  .explain { margin-top:.5rem; font-size:.95rem; background: var(--bg-primary); border:1px solid var(--border-color); border-radius:10px; padding:.6rem .8rem; }
 </style>
 
 <h1>🎮 Grammar Game</h1>
-<div class="box">
-  <p class="muted">This is a preview placeholder. Planned features include:</p>
-  <ul class="muted" style="margin-left:1rem;">
-    <li>Timed rounds with particle and verb-form challenges</li>
-    <li>Instant feedback with brief explanations</li>
-    <li>Difficulty scaling and streak bonuses</li>
-  </ul>
-  <p><a href="{% url 'home' %}">Back to Home</a></p>
-</div>
-{% endblock %}
 
+<div class="panel">
+  <div class="controls">
+    <label>JLPT
+      <select id="level" class="select">
+        <option value="N5">N5</option>
+        <option value="N4">N4</option>
+        <option value="N3">N3</option>
+        <option value="N2">N2</option>
+        <option value="N1">N1</option>
+      </select>
+    </label>
+    <label>Category
+      <select id="category" class="select">
+        <option value="particle">Particles</option>
+        <option value="verb_form">Verb Forms</option>
+        <option value="politeness">Politeness</option>
+        <option value="word_order">Word Order</option>
+        <option value="vocab">Vocabulary</option>
+      </select>
+    </label>
+    <label>Questions
+      <select id="count" class="select">
+        <option>5</option><option selected>10</option><option>15</option>
+      </select>
+    </label>
+    <button id="startBtn" class="btn btn-primary">Start</button>
+    <span id="status" class="pill" style="display:none;"></span>
+  </div>
+</div>
+
+<div class="panel" id="game" style="display:none;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="muted">Q <span id="qIndex">1</span>/<span id="qTotal">10</span></div>
+    <div class="muted" style="display:flex; gap:1rem; align-items:center;">
+      <span>Streak: <strong id="streak">0</strong> (Best <strong id="bestStreak">0</strong>)</span>
+      <span id="timerWrap" style="display:none;">⏱️ <strong id="timeLeft">60</strong>s</span>
+      <span>Score: <strong id="score">0</strong></span>
+    </div>
+  </div>
+  <div class="progress" style="margin:.5rem 0;"><div class="bar" id="prog"></div></div>
+  <div class="question">
+    <span class="pill" id="badgeLevel">N5</span>
+    <span class="pill" id="badgeCat">Particles</span>
+  </div>
+  <div class="question" id="prompt">—</div>
+  <div class="choices" id="choices"></div>
+  <div class="explain" id="explain" style="display:none;"></div>
+  <div style="display:flex; gap:.5rem; margin-top:.4rem;">
+    <button id="explainMore" class="btn btn-secondary" style="display:none;">Explain More</button>
+  </div>
+  <div style="display:flex; gap:.5rem; margin-top:.6rem;">
+    <button id="nextBtn" class="btn btn-secondary" style="display:none;">Next</button>
+    <button id="finishBtn" class="btn btn-primary" style="display:none;">Finish</button>
+  </div>
+</div>
+
+<div class="panel" id="result" style="display:none;">
+  <h3>Results</h3>
+  <p class="muted">Correct: <strong id="rCorrect">0</strong> / <strong id="rTotal">0</strong></p>
+  <div style="display:flex; gap:.5rem;">
+    <button class="btn btn-primary" id="playAgain">Play Again</button>
+    <a class="btn btn-secondary" href="{% url 'home' %}">Home</a>
+  </div>
+</div>
+
+<script>
+  const startBtn = document.getElementById('startBtn');
+  const levelSel = document.getElementById('level');
+  const catSel = document.getElementById('category');
+  const countSel = document.getElementById('count');
+  const statusPill = document.getElementById('status');
+  const game = document.getElementById('game');
+  const promptEl = document.getElementById('prompt');
+  const choicesEl = document.getElementById('choices');
+  const qIndexEl = document.getElementById('qIndex');
+  const qTotalEl = document.getElementById('qTotal');
+  const scoreEl = document.getElementById('score');
+  const explainEl = document.getElementById('explain');
+  const nextBtn = document.getElementById('nextBtn');
+  const finishBtn = document.getElementById('finishBtn');
+  const result = document.getElementById('result');
+  const rCorrect = document.getElementById('rCorrect');
+  const rTotal = document.getElementById('rTotal');
+  const prog = document.getElementById('prog');
+  const playAgain = document.getElementById('playAgain');
+  const streakEl = document.getElementById('streak');
+  const bestStreakEl = document.getElementById('bestStreak');
+  const badgeLevel = document.getElementById('badgeLevel');
+  const badgeCat = document.getElementById('badgeCat');
+  const timerWrap = document.getElementById('timerWrap');
+  const timeLeftEl = document.getElementById('timeLeft');
+  const explainMoreBtn = document.getElementById('explainMore');
+
+  let data = [];
+  let idx = 0;
+  let score = 0;
+  let startTime = 0;
+  let streak = 0;
+  let bestStreak = 0;
+  let timer = null;
+  let timeLeft = 60;
+  let timerEnabled = true;
+
+  function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+  async function fetchQuestions(level, category, count){
+    statusPill.style.display = 'inline-flex';
+    statusPill.textContent = 'Loading questions…';
+    try {
+      const res = await fetch(`/grammar-game/play?level=${encodeURIComponent(level)}&category=${encodeURIComponent(category)}&n=${encodeURIComponent(count)}`, {headers:{'X-Requested-With':'XMLHttpRequest'}});
+      const payload = await res.json();
+      return payload.items || [];
+    } catch(e){
+      statusPill.textContent = 'Load failed';
+      return [];
+    }
+  }
+
+  function renderQuestion(){
+    const q = data[idx];
+    qIndexEl.textContent = (idx+1);
+    qTotalEl.textContent = data.length;
+    prog.style.width = `${Math.round(((idx)/data.length)*100)}%`;
+    promptEl.textContent = q.prompt.replace('__','____');
+    badgeLevel.textContent = q.jlpt_level;
+    const catMap = {particle:'Particles', verb_form:'Verb Forms', politeness:'Politeness', word_order:'Word Order', vocab:'Vocabulary'};
+    badgeCat.textContent = catMap[q.category] || q.category;
+    choicesEl.innerHTML=''; explainEl.style.display='none'; nextBtn.style.display='none'; finishBtn.style.display='none';
+    explainMoreBtn.style.display='none';
+    q.choices.forEach((c,i)=>{
+      const div = document.createElement('div');
+      div.className = 'choice';
+      div.textContent = c.text;
+      div.addEventListener('click', ()=>selectChoice(div, c.is_correct, q.explanation));
+      choicesEl.appendChild(div);
+    });
+  }
+
+  function selectChoice(el, ok, explanation){
+    Array.from(choicesEl.children).forEach(ch=>ch.style.pointerEvents='none');
+    el.classList.add(ok? 'correct':'wrong');
+    if (ok) { score++; streak++; if (streak > bestStreak) bestStreak = streak; }
+    else { streak = 0; }
+    scoreEl.textContent = score;
+    streakEl.textContent = streak; bestStreakEl.textContent = bestStreak;
+    explainEl.textContent = explanation || (ok? 'Good!':'');
+    if (explainEl.textContent) explainEl.style.display = 'block';
+    explainMoreBtn.style.display = 'inline-flex';
+    const last = (idx === data.length - 1);
+    nextBtn.style.display = last? 'none':'inline-flex';
+    finishBtn.style.display = last? 'inline-flex':'none';
+
+    // Timer bonus: +1 for answering while timeLeft > 45
+    if (timerEnabled && ok && timeLeft > 45) { score++; scoreEl.textContent = score; }
+
+    // Wire Explain More
+    explainMoreBtn.onclick = async () => {
+      explainMoreBtn.textContent = 'Explaining…'; explainMoreBtn.disabled = true;
+      try {
+        const correct = Array.from(choicesEl.children).find(ch=>ch.classList.contains('correct'))?.textContent || '';
+        const res = await fetch('/grammar-game/explain', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')}, body: JSON.stringify({ prompt: promptEl.textContent, level: badgeLevel.textContent, category: badgeCat.textContent, user_answer: el.textContent, correct_text: correct }) });
+        const j = await res.json();
+        if (j.ok) { explainEl.textContent = j.explanation; explainEl.style.display = 'block'; }
+      } catch(e){}
+      explainMoreBtn.textContent = 'Explain More'; explainMoreBtn.disabled = false;
+    };
+  }
+
+  nextBtn.addEventListener('click', ()=>{ idx++; renderQuestion(); });
+  finishBtn.addEventListener('click', finish);
+  playAgain.addEventListener('click', ()=>{ result.style.display='none'; score=0; idx=0; start(); });
+
+  async function start(){
+    game.style.display='block'; result.style.display='none'; score=0; idx=0; streak=0; bestStreak=0; scoreEl.textContent='0'; prog.style.width='0%'; streakEl.textContent='0'; bestStreakEl.textContent='0';
+    const level = levelSel.value; const cat = catSel.value; const n = countSel.value;
+    data = await fetchQuestions(level, cat, n);
+    statusPill.textContent = `Loaded ${data.length} questions`;
+    startTime = Date.now();
+    if (data.length === 0){ promptEl.textContent = 'No questions available for selection.'; choicesEl.innerHTML=''; return; }
+    // Timer
+    timerEnabled = true;
+    timerWrap.style.display = timerEnabled? 'inline':'none';
+    timeLeft = 60; timeLeftEl.textContent = String(timeLeft);
+    if (timer) clearInterval(timer);
+    if (timerEnabled) {
+      timer = setInterval(()=>{
+        timeLeft--; timeLeftEl.textContent = String(timeLeft);
+        if (timeLeft <= 0) { clearInterval(timer); finish(); }
+      }, 1000);
+    }
+    renderQuestion();
+  }
+
+  async function finish(){
+    prog.style.width = '100%';
+    result.style.display='block'; game.style.display='none';
+    rCorrect.textContent = String(score);
+    rTotal.textContent = String(data.length);
+    const duration = Math.round((Date.now() - startTime)/1000);
+    try {
+      await fetch('/grammar-game/submit', {
+        method: 'POST', headers: { 'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ level: levelSel.value, category: catSel.value, total: data.length, correct: score, duration, best_streak: bestStreak, timer_enabled: timerEnabled })
+      });
+    } catch(e) {}
+  }
+
+  function getCookie(name){ const v = `; ${document.cookie}`.split(`; ${name}=`); if (v.length===2) return v.pop().split(';').shift(); }
+
+  startBtn.addEventListener('click', start);
+</script>
+{% endblock %}

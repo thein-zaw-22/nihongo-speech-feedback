@@ -92,6 +92,9 @@ LOGGING = {
     },
 }
 
+# Use BigAutoField for primary keys to avoid W042 warnings
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # Auth redirects (optional but improves UX)
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/home/'
