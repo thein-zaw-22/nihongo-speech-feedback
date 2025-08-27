@@ -4,7 +4,7 @@ AI-powered Japanese speaking feedback: upload or record audio, transcribe locall
 
 ### Overview
 - Local transcription using `openai-whisper` (Whisper) with the `base` model
-- Feedback generation using OpenAI `gpt-4o-mini` or Amazon Bedrock (`amazon.nova-lite-v1:0`)
+- Feedback generation using OpenAI `gpt-4o-mini` or Amazon Bedrock (configurable `BEDROCK_MODEL_ID`, default `amazon.nova-lite-v1:0`). Note: Amazon Nova models require an inference profile rather than on-demand.
 - Django app with Postgres storage for uploaded audio, transcript, and structured feedback
 - Simple UI for recording/uploading audio and viewing corrections
 
@@ -25,12 +25,17 @@ AI-powered Japanese speaking feedback: upload or record audio, transcribe locall
 ```bash
 echo "OPENAI_API_KEY=sk-..." > .env
 ```
-For Amazon Bedrock:
+For Amazon Bedrock (Nova via inference profile):
 ```bash
 echo "LLM_PROVIDER=bedrock" > .env
 echo "AWS_REGION_NAME=us-east-1" >> .env
 echo "AWS_ACCESS_KEY_ID=..." >> .env
 echo "AWS_SECRET_ACCESS_KEY=..." >> .env
+# Optional if using temporary credentials
+echo "AWS_SESSION_TOKEN=..." >> .env
+# Nova requires an inference profile (use the exact ARN/ID from the Bedrock console)
+echo "BEDROCK_MODEL_ID=amazon.nova-lite-v1:0" >> .env
+echo "BEDROCK_INFERENCE_PROFILE_ARN=arn:aws:bedrock:<region>:aws:inference-profile/amazon.nova-lite-v1:0" >> .env
 ```
 
 2) Build containers and run migrations once:
@@ -83,6 +88,9 @@ python manage.py runserver
   - `LLM_PROVIDER`: The language model provider. Can be `openai` (default) or `bedrock`.
   - `OPENAI_API_KEY`: Required if `LLM_PROVIDER` is `openai`.
   - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME`: Required if `LLM_PROVIDER` is `bedrock`.
+  - `AWS_SESSION_TOKEN`: Optional, if using temporary credentials.
+  - `BEDROCK_MODEL_ID`: Bedrock model ID for the Converse API. Defaults to `amazon.nova-lite-v1:0`. You must enable access to the chosen model in the Bedrock Console for your AWS account and region.
+  - `BEDROCK_INFERENCE_PROFILE_ARN`: Required for Nova models. Set an inference profile ARN or ID and the app will call Converse with that profile. The app does not fall back to on-demand `modelId` for Bedrock.
 
 - Django settings highlights:
   - `SECRET_KEY` is a placeholder in code; change it for any non-local use
@@ -105,7 +113,12 @@ python manage.py runserver
 ### Changing model choices
 - Whisper size: edit `core/views.py` and change `whisper.load_model("base")` to e.g. `"small"`, `"medium"`, etc. Larger models are slower but more accurate.
 - OpenAI model: edit the `model="gpt-4o-mini"` parameter in the `get_openai_feedback` function in `core/views.py`.
-- Bedrock model: edit the `modelId="amazon.nova-lite-v1:0"` parameter in the `get_bedrock_feedback` function in `core/views.py`.
+- Bedrock (Nova): set `BEDROCK_MODEL_ID=amazon.nova-lite-v1:0` and `BEDROCK_INFERENCE_PROFILE_ARN=<your profile ARN or ID>`. The app requires a profile for Bedrock usage by default.
+
+### Bedrock model access
+- In the AWS Console, open Amazon Bedrock and go to "Model access" to enable the models you want to use (e.g., Amazon Nova Lite, Anthropic Claude 3 Haiku). Without access, requests return `AccessDeniedException`.
+- Ensure your IAM principal has `bedrock:InvokeModel` (and streaming variants if needed) permissions for the selected model(s) and region.
+- Amazon Nova Lite/Pro/Micro cannot be invoked with on-demand throughput. If you see a `ValidationException` like "Invocation of model ID ... with on-demand throughput isn’t supported", set `BEDROCK_INFERENCE_PROFILE_ARN` to a valid inference profile that contains the target model.
 
 ### Supported audio formats
 - Browser recording saves WebM/Opus. Upload accepts common audio formats; ffmpeg handles conversion and Whisper supports standard codecs.
@@ -119,5 +132,3 @@ python manage.py runserver
 ### Not production-ready
 - Do not expose with `DEBUG=True` and placeholder `SECRET_KEY`.
 - Add proper `ALLOWED_HOSTS`, HTTPS, secrets management, and a production-ready database and static/media serving if deploying.
-
-

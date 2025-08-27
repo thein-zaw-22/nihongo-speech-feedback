@@ -8,6 +8,7 @@ __pycache__/
 
 # Environments
 .env
+.env.sample
 .venv/
 venv/
 ENV/
@@ -83,5 +84,4 @@ dmypy.json
 
 # OS
 Thumbs.db
-
 

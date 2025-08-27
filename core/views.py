@@ -2,6 +2,7 @@ import os
 import json
 import whisper
 import boto3
+from botocore.exceptions import ClientError
 from openai import OpenAI
 import logging
 from logging import Formatter
@@ -18,15 +19,34 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 logger.info("Using LLM provider: %s", LLM_PROVIDER)
 
 llm_client = None
+# Optional Bedrock model configuration (used when LLM_PROVIDER=bedrock)
+BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
 if LLM_PROVIDER == "openai":
     llm_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 elif LLM_PROVIDER == "bedrock":
-    aws_region = os.getenv("AWS_REGION_NAME", "us-east-1")
-    llm_client = boto3.client(
-        "bedrock-runtime",
-        region_name=aws_region,
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    # Resolve region in priority order: custom var -> standard AWS vars -> boto session -> fallback
+    session = boto3.session.Session()
+    aws_region = (
+        os.getenv("AWS_REGION_NAME")
+        or os.getenv("AWS_REGION")
+        or os.getenv("AWS_DEFAULT_REGION")
+        or session.region_name
+        or "us-east-1"
+    )
+    # Build client kwargs allowing default provider chain, but honoring env vars if set
+    _client_kwargs = {"region_name": aws_region}
+    if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
+        _client_kwargs.update({
+            "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
+            "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+        })
+        if os.getenv("AWS_SESSION_TOKEN"):
+            _client_kwargs["aws_session_token"] = os.getenv("AWS_SESSION_TOKEN")
+    llm_client = boto3.client("bedrock-runtime", **_client_kwargs)
+    logger.info(
+        "Initialized Bedrock client: region=%s, modelId=%s",
+        aws_region,
+        BEDROCK_MODEL_ID,
     )
 else:
     raise ValueError(f"Unsupported LLM provider: {LLM_PROVIDER}")
@@ -70,15 +90,64 @@ def get_bedrock_feedback(transcript_text):
         "The explanation must be concise and in English. If no correction is needed, return the original text and an empty array. "
         "Do not add any text before or after the JSON object."
     )
-    messages = [{"role": "user", "content": transcript_text}]
+    messages = [{"role": "user", "content": [{"text": transcript_text}]}]
 
-    logger.debug("Sending messages to Bedrock (amazon.nova-lite-v1:0): %s", messages)
-    response = llm_client.converse(
-        modelId="amazon.nova-lite-v1:0",
-        messages=messages,
-        system=[{"text": system_prompt}],
-        inferenceConfig={"maxTokens": 2048, "temperature": 0.5}
+    logger.debug(
+        "Sending messages to Bedrock (%s, region=%s): %s",
+        BEDROCK_MODEL_ID,
+        os.getenv("AWS_REGION_NAME", "us-east-1"),
+        messages,
     )
+    try:
+        response = llm_client.converse(
+            modelId=BEDROCK_MODEL_ID,
+            messages=messages,
+            system=[{"text": system_prompt}],
+            inferenceConfig={"maxTokens": 300, "topP": 0.1, "temperature": 0.3},
+            additionalModelRequestFields={"inferenceConfig": {"topK": 20}}
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code == "AccessDeniedException":
+            logger.error(
+                "Access denied invoking Bedrock modelId=%s in region=%s. "
+                "Ensure your account has model access enabled in Bedrock Console > Model access, "
+                "and your IAM principal has bedrock:InvokeModel permissions.",
+                BEDROCK_MODEL_ID,
+                os.getenv("AWS_REGION_NAME", "us-east-1"),
+            )
+            # Return a structured feedback payload with error info instead of 500
+            fallback = {
+                "corrected_text": transcript_text,
+                "corrections": [],
+                "error": (
+                    "Access denied to Bedrock model. Check Bedrock model access and IAM permissions."
+                ),
+            }
+            return json.dumps(fallback)
+        elif code == "ValidationException":
+            message = e.response.get("Error", {}).get("Message", "")
+            if "on-demand throughput" in message or "inference profile" in message:
+                logger.error(
+                    "Model %s requires an inference profile. Set BEDROCK_INFERENCE_PROFILE_ARN to a valid profile ARN or ID.",
+                    BEDROCK_MODEL_ID,
+                )
+            elif "not authorized" in message:
+                logger.error(
+                    "Account not authorized for Bedrock API. Enable Bedrock access in AWS Console."
+                )
+            else:
+                logger.error("Bedrock validation error: %s", message)
+            fallback = {
+                "corrected_text": transcript_text,
+                "corrections": [],
+                "error": (
+                    "Bedrock access issue. Check account permissions and model access."
+                ),
+            }
+            return json.dumps(fallback)
+        # For other errors, re-raise for visibility
+        raise
 
     raw_response = response['output']['message']['content'][0]['text']
     logger.debug("Raw feedback from Bedrock: %s", raw_response)
@@ -111,7 +180,7 @@ def index(request):
             form = AudioUploadForm(request.POST, request.FILES)
             if form.is_valid():
                 audio = form.cleaned_data['audio_file']
-                logger.debug("Form is valid. Audio file: %s", audio.name)
+                logger.debug("Form is valid. Audio file: %s", audio.name.replace('\n', '').replace('\r', ''))
 
                 tmp_path = None
                 try:
@@ -121,12 +190,12 @@ def index(request):
                         for chunk in audio.chunks():
                             tmp_file.write(chunk)
                         tmp_path = tmp_file.name
-                    logger.debug("Saved uploaded file to %s", tmp_path)
+                    logger.debug("Saved uploaded file to %s", tmp_path.replace('\n', '').replace('\r', ''))
 
-                    # Transcribe with Whisper
-                    result = model.transcribe(tmp_path)
+                    # Transcribe with Whisper (explicitly set to Japanese)
+                    result = model.transcribe(tmp_path, language='ja')
                     sentence = result.get('text', '')
-                    logger.debug("Transcribed sentence: %s", sentence)
+                    logger.debug("Transcribed sentence: %s", sentence.replace('\n', '').replace('\r', '')[:100])
 
                     # Get feedback from the configured LLM provider
                     raw = get_llm_feedback(sentence)
@@ -154,12 +223,12 @@ def index(request):
                         transcript=sentence,
                         feedback=feedback_data
                     )
-                    logger.debug("Transcription record created with id %s", record.id)
+                    logger.debug("Transcription record created with id %s", str(record.id))
 
                     return render(request, 'result.html', {'result': record, 'logs': logs})
                 finally:
                     if tmp_path and os.path.exists(tmp_path):
-                        logger.debug("Cleaning up temporary file: %s", tmp_path)
+                        logger.debug("Cleaning up temporary file: %s", tmp_path.replace('\n', '').replace('\r', ''))
                         os.remove(tmp_path)
         else:
             form = AudioUploadForm()
