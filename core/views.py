@@ -8,6 +8,9 @@ import google.generativeai as genai
 import logging
 from logging import Formatter
 from django.shortcuts import render, redirect
+from django.utils import timezone
+from datetime import datetime, time
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login as auth_login
@@ -286,6 +289,7 @@ def index(request):
                     feedback_data['provider'] = selected_provider
 
                 record = Transcription.objects.create(
+                    user=request.user,
                     audio_file=audio if audio else None,
                     transcript=sentence,
                     feedback=feedback_data,
@@ -313,6 +317,40 @@ def feedback(request, pk):
         return redirect('index')
     selected_provider = request.GET.get('provider') or (obj.feedback.get('provider') if isinstance(obj.feedback, dict) else None)
     return render(request, 'result.html', {'result': obj, 'selected_provider': selected_provider})
+
+
+@login_required
+def history(request):
+    items = Transcription.objects.filter(user=request.user).order_by('-created_at')
+    start_str = request.GET.get('start')
+    end_str = request.GET.get('end')
+    tz = timezone.get_current_timezone()
+    start_dt = end_dt = None
+    # Parse YYYY-MM-DD safely
+    try:
+        if start_str:
+            d = datetime.strptime(start_str, '%Y-%m-%d').date()
+            start_dt = timezone.make_aware(datetime.combine(d, time.min), tz)
+    except Exception:
+        start_str = None
+    try:
+        if end_str:
+            d = datetime.strptime(end_str, '%Y-%m-%d').date()
+            end_dt = timezone.make_aware(datetime.combine(d, time.max), tz)
+    except Exception:
+        end_str = None
+    # Validate range first: end must not be earlier than start
+    if start_dt and end_dt and end_dt < start_dt:
+        messages.error(request, 'End date cannot be earlier than start date.')
+        # Show no results to make the error obvious
+        items = Transcription.objects.none()
+    else:
+        # Apply filters only if valid
+        if start_dt:
+            items = items.filter(created_at__gte=start_dt)
+        if end_dt:
+            items = items.filter(created_at__lte=end_dt)
+    return render(request, 'history.html', {'items': items, 'start': start_str, 'end': end_str})
 
 
 def signup(request):

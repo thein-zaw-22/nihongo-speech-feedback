@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Your History{% endblock %}
+{% block content %}
+<style>
+  .list { display: grid; gap: .75rem; }
+  .item { padding: .9rem; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); }
+  .meta { color: var(--text-muted); font-size: .85rem; margin-bottom: .35rem; display:flex; gap:.5rem; align-items:center; }
+  .pill { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:9999px; background: rgba(102,126,234,.12); color: var(--brand); border:1px solid rgba(102,126,234,.25); font-size:.75rem; font-weight:600; }
+  .row { display:flex; gap:.75rem; align-items:flex-start; flex-wrap: wrap; }
+  .col { flex:1 1 320px; }
+  .actions { display:flex; gap:.5rem; margin-top:.5rem; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.5rem .8rem; border:none; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; text-decoration:none; }
+  .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; }
+  .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
+  .filter { display:flex; gap:.5rem; align-items:end; margin-bottom:.75rem; flex-wrap: wrap; }
+  .field { display:flex; flex-direction:column; gap:.25rem; }
+  .field label { font-size:.85rem; color: var(--text-secondary); font-weight:600; }
+  .input { padding:.5rem .6rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); }
+</style>
+
+<h1 style="margin-bottom:.75rem;">Your Feedback History</h1>
+<form method="get" class="filter" role="search" aria-label="Filter by date">
+  <div class="field">
+    <label for="start">From</label>
+    <input id="start" class="input" type="date" name="start" value="{{ start|default_if_none:'' }}">
+  </div>
+  <div class="field">
+    <label for="end">To</label>
+    <input id="end" class="input" type="date" name="end" value="{{ end|default_if_none:'' }}">
+  </div>
+  <div class="field" style="gap:.4rem;">
+    <label style="visibility:hidden;">Apply</label>
+    <div style="display:flex; gap:.5rem;">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-secondary" href="{% url 'history' %}">Clear</a>
+    </div>
+  </div>
+</form>
+{% if items %}
+  <div class="list">
+    {% for it in items %}
+      <div class="item">
+        <div class="meta">
+          <span>{{ it.created_at|date:"Y-m-d H:i" }}</span>
+          {% if it.feedback.provider %}
+            <span class="pill">Model: {{ it.feedback.provider|title }}</span>
+          {% endif %}
+          {% if it.audio_file %}<span class="pill">Audio</span>{% else %}<span class="pill" style="background: rgba(72,187,120,.12); color:#059669; border-color: rgba(72,187,120,.25);">Text</span>{% endif %}
+        </div>
+        <div class="row">
+          <div class="col">
+            <strong>Original</strong>
+            <div style="white-space:pre-wrap;">{{ it.transcript|truncatechars:220 }}</div>
+          </div>
+          <div class="col">
+            <strong>Corrected</strong>
+            <div style="white-space:pre-wrap;">{{ it.feedback.corrected_text|default:"(n/a)"|truncatechars:220 }}</div>
+          </div>
+        </div>
+        <div class="actions">
+          <a class="btn btn-primary" href="{% url 'feedback' it.id %}">Open</a>
+          {% if it.audio_file %}<a class="btn btn-secondary" href="{{ it.audio_file.url }}" target="_blank">Audio</a>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="item">No history yet. Submit your first feedback!</div>
+{% endif %}
+{% endblock %}

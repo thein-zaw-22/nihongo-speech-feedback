@@ -1,5 +1,14 @@
-from django.db import migrations, models
-import uuid
+from django.db import migrations
+
+
+def noop_forward(apps, schema_editor):
+    # Deprecated migration: share_token field was removed from the model.
+    # Intentionally do nothing to avoid unique index errors on legacy data.
+    return
+
+
+def noop_reverse(apps, schema_editor):
+    return
 
 
 class Migration(migrations.Migration):
@@ -9,10 +18,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='transcription',
-            name='share_token',
-            field=models.UUIDField(default=uuid.uuid4, editable=False, unique=True),
-        ),
+        migrations.RunPython(noop_forward, reverse_code=noop_reverse),
     ]
-
