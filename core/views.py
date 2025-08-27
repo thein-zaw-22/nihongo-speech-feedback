@@ -283,7 +283,7 @@ def index(request):
                 )
                 logger.debug("Saved Transcription id=%s", record.id)
 
-                return render(request, 'result.html', {'result': record, 'logs': logs, 'selected_provider': selected_provider})
+                return redirect('feedback', pk=record.id)
         else:
             # Get provider from URL parameter if available
             selected_provider = request.GET.get('provider', 'gemini')
@@ -293,6 +293,16 @@ def index(request):
 
     finally:
         logger.removeHandler(handler)
+
+
+@login_required
+def feedback(request, pk):
+    try:
+        obj = Transcription.objects.get(pk=pk)
+    except Transcription.DoesNotExist:
+        return redirect('index')
+    selected_provider = request.GET.get('provider')
+    return render(request, 'result.html', {'result': obj, 'selected_provider': selected_provider})
 
 
 def signup(request):

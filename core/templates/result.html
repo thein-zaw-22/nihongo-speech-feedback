@@ -79,7 +79,7 @@
   </div>
 
 <div class="page-actions">
-  <a href="/?provider={{ selected_provider }}" class="btn btn-primary">🔄 Analyze Another</a>
+  <a href="{% url 'index' %}{% if selected_provider %}?provider={{ selected_provider }}{% endif %}" class="btn btn-primary">🔄 Analyze Another</a>
   
   {% if logs %}
     <button type="button" id="toggleLogs" class="btn btn-secondary">🔍 Show Debug Logs</button>

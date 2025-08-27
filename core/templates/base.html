@@ -41,6 +41,8 @@
     .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,.4); }
     .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
     .btn-secondary:hover { background: rgba(102,126,234,.2); }
+    .btn-danger { background: rgba(239,68,68,.12); color: #b91c1c; border: 1px solid rgba(239,68,68,.3); }
+    .btn-danger:hover { background: rgba(239,68,68,.2); }
     .container { max-width: 1000px; margin: 1.5rem auto; padding: 2rem; background: var(--bg-primary); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); transition: all 0.3s ease; }
     .theme-select {
       padding: .35rem .6rem;
@@ -61,10 +63,10 @@
       <div class="brand">🎯 AI Feedback</div>
       <div class="actions">
         {% if user.is_authenticated %}
-          <a class="btn btn-secondary" href="/">Home</a>
+          <a class="btn btn-secondary" href="/home/">Home</a>
           <form action="{% url 'logout' %}" method="post" style="display:inline; margin:0;">
             {% csrf_token %}
-            <button type="submit" class="btn btn-secondary" style="cursor:pointer;">Logout</button>
+            <button type="submit" class="btn btn-danger" style="cursor:pointer;">Logout</button>
           </form>
         {% else %}
           {% with view_name=request.resolver_match.url_name %}
