@@ -18,7 +18,9 @@
   .progress { height:8px; border-radius:9999px; background: rgba(102,126,234,.12); overflow:hidden; }
   .bar { height:100%; width:0; background: linear-gradient(135deg, var(--brand), var(--brand-2)); transition: width .2s ease; }
   .muted { color: var(--text-secondary); }
-  .explain { margin-top:.5rem; font-size:.95rem; background: var(--bg-primary); border:1px solid var(--border-color); border-radius:10px; padding:.6rem .8rem; }
+  .explain { margin-top:.5rem; font-size:.95rem; background: var(--bg-primary); border:1px solid var(--border-color); border-radius:10px; padding:.6rem .8rem; overflow-wrap:anywhere; word-break:break-word; }
+  .explain ul { margin:.35rem 0 .35rem 1.1rem; padding:0; list-style: disc; }
+  .explain li { margin:.15rem 0; }
   .spinner { width:14px; height:14px; border:2px solid rgba(102,126,234,.35); border-top-color: var(--brand); border-radius:50%; animation: spin 1s linear infinite; display:none; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
@@ -50,6 +52,9 @@
         <option>5</option><option selected>10</option><option>15</option>
       </select>
     </label>
+    <label class="muted" style="display:flex; align-items:center; gap:.35rem;">
+      <input type="checkbox" id="timerToggle"> Timer
+    </label>
     <button id="startBtn" class="btn btn-primary">Start</button>
     <span id="status" class="pill" style="display:none;"></span>
     <a href="{% url 'grammar_history' %}" class="btn btn-secondary" style="margin-left:auto;">History</a>
@@ -75,12 +80,6 @@
   <div class="explain" id="explain" style="display:none;"></div>
   <div style="display:flex; gap:.6rem; align-items:center; margin-top:.4rem; flex-wrap: wrap;">
     <button id="explainMore" class="btn btn-secondary" style="display:none;">Explain More <span id="explainSpin" class="spinner" style="margin-left:.25rem;"></span></button>
-    <label class="muted" style="display:flex; align-items:center; gap:.35rem;">
-      <input type="checkbox" id="autoExplain"> Auto-explain
-    </label>
-    <label class="muted" style="display:flex; align-items:center; gap:.35rem;">
-      After <input type="number" id="autoExplainSec" class="input" min="1" max="10" value="3" style="width:3.5rem;"> s
-    </label>
   </div>
   <div class="explain" id="explainMoreBox" style="display:none;"></div>
   <div style="display:flex; gap:.5rem; margin-top:.6rem;">
@@ -103,6 +102,7 @@
   const levelSel = document.getElementById('level');
   const catSel = document.getElementById('category');
   const countSel = document.getElementById('count');
+  const timerToggle = document.getElementById('timerToggle');
   const statusPill = document.getElementById('status');
   const game = document.getElementById('game');
   const promptEl = document.getElementById('prompt');
@@ -127,8 +127,6 @@
   const timeLeftEl = document.getElementById('timeLeft');
   const explainMoreBtn = document.getElementById('explainMore');
   const explainSpin = document.getElementById('explainSpin');
-  const autoExplain = document.getElementById('autoExplain');
-  const autoExplainSec = document.getElementById('autoExplainSec');
 
   let data = [];
   let idx = 0;
@@ -139,7 +137,8 @@
   let timer = null;
   let timeLeft = 60;
   let timerEnabled = true;
-  let autoExplainTimer = null;
+  // timer toggle in controls
+  const timerToggleId = 'gg_timer_toggle';
 
   function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
@@ -165,7 +164,6 @@
     badgeLevel.textContent = q.jlpt_level;
     const catMap = {particle:'Particles', verb_form:'Verb Forms', politeness:'Politeness', word_order:'Word Order', vocab:'Vocabulary'};
     badgeCat.textContent = catMap[q.category] || q.category;
-    if (autoExplainTimer) { clearTimeout(autoExplainTimer); autoExplainTimer = null; }
     choicesEl.innerHTML=''; explainEl.style.display='none'; nextBtn.style.display='none'; finishBtn.style.display='none';
     explainMoreBtn.style.display='none'; explainMoreBox.style.display='none'; explainMoreBox.innerHTML='';
     q.choices.forEach((c,i)=>{
@@ -197,12 +195,6 @@
 
     // Timer bonus: +1 for answering while timeLeft > 45
     if (timerEnabled && ok && timeLeft > 45) { score++; scoreEl.textContent = score; }
-
-    // Auto-explain after delay if enabled
-    if (autoExplain && autoExplain.checked) {
-      const delayMs = Math.max(1, Math.min(parseInt(autoExplainSec.value||'3', 10), 10)) * 1000;
-      autoExplainTimer = setTimeout(()=>{ if (explainMoreBtn.style.display !== 'none') explainMoreBtn.click(); }, delayMs);
-    }
 
     // Wire Explain More
     let explainCache = null;
@@ -236,20 +228,20 @@
     };
   }
 
-  nextBtn.addEventListener('click', ()=>{ if (autoExplainTimer) { clearTimeout(autoExplainTimer); autoExplainTimer = null; } explainEl.style.display='none'; explainMoreBtn.style.display='none'; explainMoreBox.style.display='none'; idx++; renderQuestion(); });
+  nextBtn.addEventListener('click', ()=>{ explainEl.style.display='none'; explainMoreBtn.style.display='none'; explainMoreBox.style.display='none'; idx++; renderQuestion(); });
   finishBtn.addEventListener('click', finish);
   playAgain.addEventListener('click', ()=>{ result.style.display='none'; score=0; idx=0; start(); });
 
   async function start(){
     game.style.display='block'; result.style.display='none'; score=0; idx=0; streak=0; bestStreak=0; scoreEl.textContent='0'; prog.style.width='0%'; streakEl.textContent='0'; bestStreakEl.textContent='0';
     const level = levelSel.value; const cat = catSel.value; const n = countSel.value;
-    try { localStorage.setItem('gg_level', level); localStorage.setItem('gg_category', cat); localStorage.setItem('gg_count', n); } catch(e) {}
+    try { localStorage.setItem('gg_level', level); localStorage.setItem('gg_category', cat); localStorage.setItem('gg_count', n); localStorage.setItem('gg_timer', String(timerToggle.checked)); } catch(e) {}
     data = await fetchQuestions(level, cat, n);
     statusPill.textContent = `Loaded ${data.length} questions`;
     startTime = Date.now();
     if (data.length === 0){ promptEl.textContent = 'No questions available for selection.'; choicesEl.innerHTML=''; return; }
     // Timer
-    timerEnabled = true;
+    timerEnabled = !!timerToggle.checked;
     timerWrap.style.display = timerEnabled? 'inline':'none';
     timeLeft = 60; timeLeftEl.textContent = String(timeLeft);
     if (timer) clearInterval(timer);
@@ -281,8 +273,9 @@
   startBtn.addEventListener('click', start);
   document.addEventListener('DOMContentLoaded', ()=>{
     try {
-      const lv = localStorage.getItem('gg_level'); const ct = localStorage.getItem('gg_category'); const cn = localStorage.getItem('gg_count');
+      const lv = localStorage.getItem('gg_level'); const ct = localStorage.getItem('gg_category'); const cn = localStorage.getItem('gg_count'); const tm = localStorage.getItem('gg_timer');
       if (lv) levelSel.value = lv; if (ct) catSel.value = ct; if (cn) countSel.value = cn;
+      if (tm !== null) timerToggle.checked = (tm === 'true'); else timerToggle.checked = true;
     } catch(e) {}
   });
 </script>
