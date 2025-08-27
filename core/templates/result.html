@@ -26,7 +26,9 @@
 <body>
   <div class="container">
     <!-- Audio Playback -->
-    <audio controls src="{{ result.audio_file.url }}"></audio>
+    {% if result.audio_file %}
+      <audio controls src="{{ result.audio_file.url }}"></audio>
+    {% endif %}
 
     <!-- Two-column result display -->
     <div class="grid">

@@ -47,18 +47,27 @@
 <body>
   <div class="container">
     <h1>AI-Powered Japanese Speaking Feedback - POC</h1>
-    <p class="instructions">Record your Japanese sentence or upload an audio file, then submit for analysis.</p>
+    <p class="instructions">Record your Japanese sentence, upload an audio file, or enter text directly for analysis.</p>
     <form id="audio-form" method="post" enctype="multipart/form-data">
       {% csrf_token %}
-      <input type="file" id="fileInput" name="audio_file" accept="audio/*" style="display:none;">
+      
+      <!-- Audio Input Section -->
+      <div id="audio-section">
+        <h3>Audio Input</h3>
+        <input type="file" id="fileInput" name="audio_file" accept="audio/*" style="display:none;">
+        <button type="button" id="record" class="btn">Record</button>
+        <button type="button" id="stop" class="btn" disabled>Stop</button>
+        <button type="button" id="upload" class="btn">Upload File</button>
+        <audio id="audioPlayback" controls></audio>
+      </div>
+      
+      <!-- Text Input Section -->
+      <div id="text-section" style="margin-top: 2rem;">
+        <h3>Text Input</h3>
+        <textarea id="textInput" name="text_input" rows="3" placeholder="Enter Japanese text here..." style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+      </div>
 
-      <button type="button" id="record" class="btn">Record</button>
-      <button type="button" id="stop" class="btn" disabled>Stop</button>
-      <button type="button" id="upload" class="btn">Upload File</button>
-
-      <audio id="audioPlayback" controls></audio>
-
-      <div>
+      <div style="margin-top: 1rem;">
         <button type="submit" id="submitBtn" class="btn" disabled>Submit for Analysis</button>
       </div>
     </form>
@@ -113,8 +122,18 @@
     const url = URL.createObjectURL(file);
     audioPlayback.src = url;
     audioPlayback.style.display = 'block';
-    submitBtn.disabled = false;
+    checkSubmitButton();
   });
+  
+  // Handle text input
+  const textInput = document.getElementById('textInput');
+  textInput.addEventListener('input', checkSubmitButton);
+  
+  function checkSubmitButton() {
+    const hasAudio = fileInput.files.length > 0;
+    const hasText = textInput.value.trim().length > 0;
+    submitBtn.disabled = !(hasAudio || hasText);
+  }
 </script>
 </body>
 </html>

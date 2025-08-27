@@ -4,6 +4,7 @@ import whisper
 import boto3
 from botocore.exceptions import ClientError
 from openai import OpenAI
+import google.generativeai as genai
 import logging
 from logging import Formatter
 from django.shortcuts import render
@@ -21,8 +22,14 @@ logger.info("Using LLM provider: %s", LLM_PROVIDER)
 llm_client = None
 # Optional Bedrock model configuration (used when LLM_PROVIDER=bedrock)
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
+# Optional Gemini model configuration (used when LLM_PROVIDER=gemini)
+GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash-exp")
 if LLM_PROVIDER == "openai":
     llm_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+elif LLM_PROVIDER == "gemini":
+    genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+    llm_client = genai.GenerativeModel(GEMINI_MODEL_ID)
+    logger.info("Initialized Gemini client: modelId=%s", GEMINI_MODEL_ID)
 elif LLM_PROVIDER == "bedrock":
     # Resolve region in priority order: custom var -> standard AWS vars -> boto session -> fallback
     session = boto3.session.Session()
@@ -49,7 +56,7 @@ elif LLM_PROVIDER == "bedrock":
         BEDROCK_MODEL_ID,
     )
 else:
-    raise ValueError(f"Unsupported LLM provider: {LLM_PROVIDER}")
+    raise ValueError(f"Unsupported LLM provider: {LLM_PROVIDER}. Supported: openai, gemini, bedrock")
 # --------------------------------
 
 # Load the local Whisper model
@@ -78,6 +85,32 @@ def get_openai_feedback(transcript_text):
         messages=messages
     )
     return response.choices[0].message.content
+
+def get_gemini_feedback(transcript_text):
+    """Gets feedback from Google Gemini model."""
+    prompt = (
+        "You are a professional Japanese language tutor. "
+        "Your task is to correct Japanese sentences to be more natural. "
+        "Respond with ONLY a valid JSON object containing `corrected_text` and `corrections` keys. "
+        "`corrected_text` should be the full, corrected sentence. "
+        "`corrections` should be an array of objects, each with `original`, `corrected`, and `explanation` fields. "
+        "The explanation must be concise and in English. If no correction is needed, return the original text and an empty array. "
+        "Do not add any text before or after the JSON object.\n\n"
+        f"Japanese text: {transcript_text}"
+    )
+    
+    logger.debug("Sending prompt to Gemini (%s): %s", GEMINI_MODEL_ID, prompt[:100])
+    try:
+        response = llm_client.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        logger.error("Gemini API error: %s", str(e))
+        fallback = {
+            "corrected_text": transcript_text,
+            "corrections": [],
+            "error": f"Gemini API error: {str(e)}"
+        }
+        return json.dumps(fallback)
 
 def get_bedrock_feedback(transcript_text):
     """Gets feedback from Amazon Bedrock using the Converse API."""
@@ -157,6 +190,8 @@ def get_llm_feedback(transcript_text):
     """Dispatches to the configured LLM provider."""
     if LLM_PROVIDER == "openai":
         return get_openai_feedback(transcript_text)
+    elif LLM_PROVIDER == "gemini":
+        return get_gemini_feedback(transcript_text)
     elif LLM_PROVIDER == "bedrock":
         return get_bedrock_feedback(transcript_text)
     # This should not be reached due to the initial check
@@ -179,57 +214,64 @@ def index(request):
             logger.debug("Received POST request with audio upload")
             form = AudioUploadForm(request.POST, request.FILES)
             if form.is_valid():
-                audio = form.cleaned_data['audio_file']
-                logger.debug("Form is valid. Audio file: %s", audio.name.replace('\n', '').replace('\r', ''))
-
-                tmp_path = None
-                try:
-                    # Save uploaded file to a temporary file that is not deleted on close
-                    suffix = os.path.splitext(audio.name)[1] or '.wav'
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-                        for chunk in audio.chunks():
-                            tmp_file.write(chunk)
-                        tmp_path = tmp_file.name
-                    logger.debug("Saved uploaded file to %s", tmp_path.replace('\n', '').replace('\r', ''))
-
-                    # Transcribe with Whisper (explicitly set to Japanese)
-                    result = model.transcribe(tmp_path, language='ja')
-                    sentence = result.get('text', '')
-                    logger.debug("Transcribed sentence: %s", sentence.replace('\n', '').replace('\r', '')[:100])
-
-                    # Get feedback from the configured LLM provider
-                    raw = get_llm_feedback(sentence)
-
-                    # Parse JSON feedback (with fallback to clean JSON substring)
+                audio = form.cleaned_data.get('audio_file')
+                text_input = form.cleaned_data.get('text_input')
+                
+                if text_input:
+                    # Direct text input - no transcription needed
+                    sentence = text_input.strip()
+                    logger.debug("Using direct text input: %s", sentence.replace('\n', '').replace('\r', '')[:100])
+                else:
+                    # Audio input - transcribe with Whisper
+                    logger.debug("Form is valid. Audio file: %s", audio.name.replace('\n', '').replace('\r', ''))
+                    tmp_path = None
                     try:
-                        feedback_data = json.loads(raw)
+                        # Save uploaded file to a temporary file that is not deleted on close
+                        suffix = os.path.splitext(audio.name)[1] or '.wav'
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                            for chunk in audio.chunks():
+                                tmp_file.write(chunk)
+                            tmp_path = tmp_file.name
+                        logger.debug("Saved uploaded file to %s", tmp_path.replace('\n', '').replace('\r', ''))
+
+                        # Transcribe with Whisper (explicitly set to Japanese)
+                        result = model.transcribe(tmp_path, language='ja')
+                        sentence = result.get('text', '')
+                        logger.debug("Transcribed sentence: %s", sentence.replace('\n', '').replace('\r', '')[:100])
+                    finally:
+                        if tmp_path and os.path.exists(tmp_path):
+                            logger.debug("Cleaning up temporary file: %s", tmp_path.replace('\n', '').replace('\r', ''))
+                            os.remove(tmp_path)
+
+                # Get feedback from the configured LLM provider
+                raw = get_llm_feedback(sentence)
+
+                # Parse JSON feedback (with fallback to clean JSON substring)
+                try:
+                    feedback_data = json.loads(raw)
+                except json.JSONDecodeError:
+                    try:
+                        start = raw.find('{')
+                        end = raw.rfind('}') + 1
+                        snippet = raw[start:end]
+                        feedback_data = json.loads(snippet)
                     except json.JSONDecodeError:
-                        try:
-                            start = raw.find('{')
-                            end = raw.rfind('}') + 1
-                            snippet = raw[start:end]
-                            feedback_data = json.loads(snippet)
-                        except json.JSONDecodeError:
-                            feedback_data = {
-                                "corrected_text": sentence,
-                                "corrections": [],
-                                "raw": raw
-                            }
-                            logger.debug("Failed to parse JSON, using raw feedback and assuming no corrections")
+                        feedback_data = {
+                            "corrected_text": sentence,
+                            "corrections": [],
+                            "raw": raw
+                        }
+                        logger.debug("Failed to parse JSON, using raw feedback and assuming no corrections")
 
-                    # Save result
-                    record = Transcription.objects.create(
-                        audio_file=audio,
-                        transcript=sentence,
-                        feedback=feedback_data
-                    )
-                    logger.debug("Transcription record created with id %s", str(record.id))
+                # Save result
+                record = Transcription.objects.create(
+                    audio_file=audio,
+                    transcript=sentence,
+                    feedback=feedback_data
+                )
+                logger.debug("Transcription record created with id %s", str(record.id))
 
-                    return render(request, 'result.html', {'result': record, 'logs': logs})
-                finally:
-                    if tmp_path and os.path.exists(tmp_path):
-                        logger.debug("Cleaning up temporary file: %s", tmp_path.replace('\n', '').replace('\r', ''))
-                        os.remove(tmp_path)
+                return render(request, 'result.html', {'result': record, 'logs': logs})
         else:
             form = AudioUploadForm()
 

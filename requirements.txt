@@ -6,3 +6,4 @@ pydub
 ffmpeg-python
 python-dotenv
 boto3
+google-generativeai
