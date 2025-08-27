@@ -17,7 +17,7 @@
     <label>JLPT</label>
     <select class="select" name="level">
       <option value="">All</option>
-      {% for lv in 'N5,N4,N3,N2,N1'.split(',') %}
+      {% for lv in levels %}
         <option value="{{ lv }}" {% if filter_level == lv %}selected{% endif %}>{{ lv }}</option>
       {% endfor %}
     </select>
@@ -74,4 +74,3 @@
   <div class="item">No sessions found.</div>
 {% endif %}
 {% endblock %}
-

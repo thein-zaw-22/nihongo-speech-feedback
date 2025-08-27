@@ -140,6 +140,16 @@
   // timer toggle in controls
   const timerToggleId = 'gg_timer_toggle';
 
+  function startTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (!timerEnabled) { timerWrap.style.display = 'none'; return; }
+    timerWrap.style.display = 'inline';
+    timer = setInterval(()=>{
+      timeLeft--; timeLeftEl.textContent = String(timeLeft);
+      if (timeLeft <= 0) { clearInterval(timer); timer = null; finish(); }
+    }, 1000);
+  }
+
   function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
   async function fetchQuestions(level, category, count){
@@ -239,18 +249,20 @@
     data = await fetchQuestions(level, cat, n);
     statusPill.textContent = `Loaded ${data.length} questions`;
     startTime = Date.now();
-    if (data.length === 0){ promptEl.textContent = 'No questions available for selection.'; choicesEl.innerHTML=''; return; }
+    if (data.length === 0){
+      qIndexEl.textContent = '0'; qTotalEl.textContent = '0'; prog.style.width = '0%';
+      promptEl.textContent = 'No questions available for selection.';
+      choicesEl.innerHTML=''; explainEl.style.display='none';
+      explainMoreBtn.style.display='none'; explainMoreBox.style.display='none'; explainMoreBox.innerHTML='';
+      nextBtn.style.display='none'; finishBtn.style.display='none';
+      if (timer) { clearInterval(timer); timer = null; }
+      timerWrap.style.display='none';
+      return;
+    }
     // Timer
     timerEnabled = !!timerToggle.checked;
-    timerWrap.style.display = timerEnabled? 'inline':'none';
     timeLeft = 60; timeLeftEl.textContent = String(timeLeft);
-    if (timer) clearInterval(timer);
-    if (timerEnabled) {
-      timer = setInterval(()=>{
-        timeLeft--; timeLeftEl.textContent = String(timeLeft);
-        if (timeLeft <= 0) { clearInterval(timer); finish(); }
-      }, 1000);
-    }
+    startTimer();
     renderQuestion();
   }
 
@@ -277,6 +289,12 @@
       if (lv) levelSel.value = lv; if (ct) catSel.value = ct; if (cn) countSel.value = cn;
       if (tm !== null) timerToggle.checked = (tm === 'true'); else timerToggle.checked = true;
     } catch(e) {}
+  });
+
+  // Allow user to toggle timer on/off during a session
+  timerToggle.addEventListener('change', ()=>{
+    timerEnabled = !!timerToggle.checked;
+    startTimer();
   });
 </script>
 {% endblock %}

@@ -509,6 +509,7 @@ def grammar_history(request):
         'filter_level': level or '',
         'filter_category': category or '',
         'best': best,
+        'levels': ['N5','N4','N3','N2','N1'],
     })
 
 
