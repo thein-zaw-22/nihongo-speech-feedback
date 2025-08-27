@@ -389,7 +389,7 @@ def grammar_play(request):
         n = max(1, min(int(request.GET.get('n', '10')), 30))
     except Exception:
         n = 10
-    qs = GrammarQuestion.objects.filter(jlpt_level=level, category=category, is_active=True).order_by('?')[:n]
+    qs = GrammarQuestion.objects.filter(jlpt_level=level, category=category, is_active=True).prefetch_related('choices').order_by('?')[:n]
     items = []
     for q in qs:
         choices = list(q.choices.all().values('text', 'is_correct'))
@@ -446,19 +446,49 @@ def grammar_explain(request):
         category = payload.get('category', '')
         user_answer = payload.get('user_answer', '')
         correct_text = payload.get('correct_text', '')
-        context = f"JLPT {level}, category {category}.\nQuestion: {prompt}\nUser answer: {user_answer}\nCorrect: {correct_text}.\nExplain briefly why the correct answer is natural and the user answer is not, in English."
-        # Reuse primary LLM with concise instruction
+        # Build a dedicated prompt asking for rich JSON
+        system = (
+            "You are a concise Japanese grammar coach. "
+            "Return ONLY a JSON object with keys: summary (1-2 sentences), why_correct, why_incorrect, "
+            "grammar_point (name + 1 line), examples (array of 2 short natural examples), tips (array of 2-3 short tips). "
+            "Use clear English; include Japanese in examples. Do not include any extra text outside JSON."
+        )
+        user = (
+            f"JLPT level: {level}\nCategory: {category}\nQuestion: {prompt}\n"
+            f"User answer: {user_answer}\nCorrect answer: {correct_text}"
+        )
+        provider = request.session.get('llm_provider') or LLM_PROVIDER
         try:
-            raw = get_llm_feedback(context)
-            # If LLM returns JSON by our system prompt, fallback to raw text
+            if provider == 'openai':
+                client = get_client('openai')
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"system","content":system},{"role":"user","content":user}]
+                )
+                raw = resp.choices[0].message.content
+            elif provider == 'gemini':
+                client = get_client('gemini')
+                raw = client.generate_content(system + "\n\n" + user).text
+            elif provider == 'bedrock':
+                client = get_client('bedrock')
+                resp = client.converse(
+                    modelId=BEDROCK_MODEL_ID,
+                    messages=[{"role":"user","content":[{"text":user}]}],
+                    system=[{"text":system}],
+                    inferenceConfig={"maxTokens":400, "temperature":0.3}
+                )
+                raw = resp['output']['message']['content'][0]['text']
+            else:
+                raw = json.dumps({"summary":"Unsupported provider","why_correct":"","why_incorrect":"","grammar_point":"","examples":[],"tips":[]})
+            # Parse JSON (attempt to extract braces if provider adds text)
             try:
                 obj = json.loads(raw)
-                text = obj.get('corrected_text') or raw
             except Exception:
-                text = raw
+                start = raw.find('{'); end = raw.rfind('}')+1
+                obj = json.loads(raw[start:end]) if start >=0 and end>start else {"summary": raw}
         except Exception as e:
-            text = f"Explanation unavailable: {e}"
-        return JsonResponse({'ok': True, 'explanation': text})
+            obj = {"summary": f"Explanation unavailable: {e}", "why_correct":"", "why_incorrect":"", "grammar_point":"", "examples":[], "tips":[]}
+        return JsonResponse({'ok': True, 'explanation': obj})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=400)
 

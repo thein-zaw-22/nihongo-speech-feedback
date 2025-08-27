@@ -11,7 +11,7 @@
   .pill { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:9999px; background: rgba(102,126,234,.12); color: var(--brand); border:1px solid rgba(102,126,234,.25); font-size:.75rem; font-weight:600; }
   .question { font-size:1.05rem; margin:.5rem 0; }
   .choices { display:grid; gap:.5rem; }
-  .choice { padding:.6rem .8rem; border:1px solid var(--border-color); border-radius:10px; cursor:pointer; background: var(--bg-primary); }
+  .choice { padding:.6rem .8rem; border:1px solid var(--border-color); border-radius:10px; cursor:pointer; background: var(--bg-primary); color: var(--text-primary); }
   .choice:hover { background: rgba(102,126,234,.08); }
   .choice.correct { border-color:#34d399; background: rgba(52,211,153,.12); }
   .choice.wrong { border-color:#f87171; background: rgba(248,113,113,.12); }
@@ -19,6 +19,8 @@
   .bar { height:100%; width:0; background: linear-gradient(135deg, var(--brand), var(--brand-2)); transition: width .2s ease; }
   .muted { color: var(--text-secondary); }
   .explain { margin-top:.5rem; font-size:.95rem; background: var(--bg-primary); border:1px solid var(--border-color); border-radius:10px; padding:.6rem .8rem; }
+  .spinner { width:14px; height:14px; border:2px solid rgba(102,126,234,.35); border-top-color: var(--brand); border-radius:50%; animation: spin 1s linear infinite; display:none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
 <h1>🎮 Grammar Game</h1>
@@ -50,6 +52,7 @@
     </label>
     <button id="startBtn" class="btn btn-primary">Start</button>
     <span id="status" class="pill" style="display:none;"></span>
+    <a href="{% url 'grammar_history' %}" class="btn btn-secondary" style="margin-left:auto;">History</a>
   </div>
 </div>
 
@@ -70,9 +73,16 @@
   <div class="question" id="prompt">—</div>
   <div class="choices" id="choices"></div>
   <div class="explain" id="explain" style="display:none;"></div>
-  <div style="display:flex; gap:.5rem; margin-top:.4rem;">
-    <button id="explainMore" class="btn btn-secondary" style="display:none;">Explain More</button>
+  <div style="display:flex; gap:.6rem; align-items:center; margin-top:.4rem; flex-wrap: wrap;">
+    <button id="explainMore" class="btn btn-secondary" style="display:none;">Explain More <span id="explainSpin" class="spinner" style="margin-left:.25rem;"></span></button>
+    <label class="muted" style="display:flex; align-items:center; gap:.35rem;">
+      <input type="checkbox" id="autoExplain"> Auto-explain
+    </label>
+    <label class="muted" style="display:flex; align-items:center; gap:.35rem;">
+      After <input type="number" id="autoExplainSec" class="input" min="1" max="10" value="3" style="width:3.5rem;"> s
+    </label>
   </div>
+  <div class="explain" id="explainMoreBox" style="display:none;"></div>
   <div style="display:flex; gap:.5rem; margin-top:.6rem;">
     <button id="nextBtn" class="btn btn-secondary" style="display:none;">Next</button>
     <button id="finishBtn" class="btn btn-primary" style="display:none;">Finish</button>
@@ -101,6 +111,7 @@
   const qTotalEl = document.getElementById('qTotal');
   const scoreEl = document.getElementById('score');
   const explainEl = document.getElementById('explain');
+  const explainMoreBox = document.getElementById('explainMoreBox');
   const nextBtn = document.getElementById('nextBtn');
   const finishBtn = document.getElementById('finishBtn');
   const result = document.getElementById('result');
@@ -115,6 +126,9 @@
   const timerWrap = document.getElementById('timerWrap');
   const timeLeftEl = document.getElementById('timeLeft');
   const explainMoreBtn = document.getElementById('explainMore');
+  const explainSpin = document.getElementById('explainSpin');
+  const autoExplain = document.getElementById('autoExplain');
+  const autoExplainSec = document.getElementById('autoExplainSec');
 
   let data = [];
   let idx = 0;
@@ -125,6 +139,7 @@
   let timer = null;
   let timeLeft = 60;
   let timerEnabled = true;
+  let autoExplainTimer = null;
 
   function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
@@ -150,8 +165,9 @@
     badgeLevel.textContent = q.jlpt_level;
     const catMap = {particle:'Particles', verb_form:'Verb Forms', politeness:'Politeness', word_order:'Word Order', vocab:'Vocabulary'};
     badgeCat.textContent = catMap[q.category] || q.category;
+    if (autoExplainTimer) { clearTimeout(autoExplainTimer); autoExplainTimer = null; }
     choicesEl.innerHTML=''; explainEl.style.display='none'; nextBtn.style.display='none'; finishBtn.style.display='none';
-    explainMoreBtn.style.display='none';
+    explainMoreBtn.style.display='none'; explainMoreBox.style.display='none'; explainMoreBox.innerHTML='';
     q.choices.forEach((c,i)=>{
       const div = document.createElement('div');
       div.className = 'choice';
@@ -168,9 +184,13 @@
     else { streak = 0; }
     scoreEl.textContent = score;
     streakEl.textContent = streak; bestStreakEl.textContent = bestStreak;
-    explainEl.textContent = explanation || (ok? 'Good!':'');
+    let baseExplain = explanation;
+    if (baseExplain && typeof baseExplain === 'object') {
+      baseExplain = baseExplain.summary || baseExplain.why_correct || JSON.stringify(baseExplain);
+    }
+    explainEl.textContent = baseExplain || (ok? 'Good!':'');
     if (explainEl.textContent) explainEl.style.display = 'block';
-    explainMoreBtn.style.display = 'inline-flex';
+    explainMoreBtn.style.display = 'inline-flex'; explainMoreBox.style.display='none'; explainMoreBox.innerHTML='';
     const last = (idx === data.length - 1);
     nextBtn.style.display = last? 'none':'inline-flex';
     finishBtn.style.display = last? 'inline-flex':'none';
@@ -178,26 +198,52 @@
     // Timer bonus: +1 for answering while timeLeft > 45
     if (timerEnabled && ok && timeLeft > 45) { score++; scoreEl.textContent = score; }
 
+    // Auto-explain after delay if enabled
+    if (autoExplain && autoExplain.checked) {
+      const delayMs = Math.max(1, Math.min(parseInt(autoExplainSec.value||'3', 10), 10)) * 1000;
+      autoExplainTimer = setTimeout(()=>{ if (explainMoreBtn.style.display !== 'none') explainMoreBtn.click(); }, delayMs);
+    }
+
     // Wire Explain More
+    let explainCache = null;
     explainMoreBtn.onclick = async () => {
-      explainMoreBtn.textContent = 'Explaining…'; explainMoreBtn.disabled = true;
+      if (explainMoreBox.style.display === 'block') { explainMoreBox.style.display='none'; return; }
+      if (explainCache) { explainMoreBox.style.display='block'; return; }
+      explainMoreBtn.disabled = true; if (explainSpin) explainSpin.style.display='inline-block';
       try {
         const correct = Array.from(choicesEl.children).find(ch=>ch.classList.contains('correct'))?.textContent || '';
         const res = await fetch('/grammar-game/explain', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')}, body: JSON.stringify({ prompt: promptEl.textContent, level: badgeLevel.textContent, category: badgeCat.textContent, user_answer: el.textContent, correct_text: correct }) });
         const j = await res.json();
-        if (j.ok) { explainEl.textContent = j.explanation; explainEl.style.display = 'block'; }
+        if (j.ok) {
+          const ex = j.explanation || {};
+          // Render nicely under the button
+          const examples = (ex.examples||[]).map(e=>`<li>${e}</li>`).join('');
+          const tips = (ex.tips||[]).map(e=>`<li>${e}</li>`).join('');
+          const html = `
+            ${ex.summary ? `<p><strong>Summary:</strong> ${ex.summary}</p>`: ''}
+            ${ex.grammar_point ? `<p><strong>Grammar:</strong> ${ex.grammar_point}</p>`: ''}
+            ${ex.why_correct ? `<p><strong>Why correct:</strong> ${ex.why_correct}</p>`: ''}
+            ${ex.why_incorrect ? `<p><strong>Why your answer:</strong> ${ex.why_incorrect}</p>`: ''}
+            ${examples ? `<div><strong>Examples:</strong><ul>${examples}</ul></div>`: ''}
+            ${tips ? `<div><strong>Tips:</strong><ul>${tips}</ul></div>`: ''}
+          `;
+          explainCache = html;
+          explainMoreBox.innerHTML = html;
+          explainMoreBox.style.display='block';
+        }
       } catch(e){}
-      explainMoreBtn.textContent = 'Explain More'; explainMoreBtn.disabled = false;
+      if (explainSpin) explainSpin.style.display='none'; explainMoreBtn.disabled = false;
     };
   }
 
-  nextBtn.addEventListener('click', ()=>{ idx++; renderQuestion(); });
+  nextBtn.addEventListener('click', ()=>{ if (autoExplainTimer) { clearTimeout(autoExplainTimer); autoExplainTimer = null; } explainEl.style.display='none'; explainMoreBtn.style.display='none'; explainMoreBox.style.display='none'; idx++; renderQuestion(); });
   finishBtn.addEventListener('click', finish);
   playAgain.addEventListener('click', ()=>{ result.style.display='none'; score=0; idx=0; start(); });
 
   async function start(){
     game.style.display='block'; result.style.display='none'; score=0; idx=0; streak=0; bestStreak=0; scoreEl.textContent='0'; prog.style.width='0%'; streakEl.textContent='0'; bestStreakEl.textContent='0';
     const level = levelSel.value; const cat = catSel.value; const n = countSel.value;
+    try { localStorage.setItem('gg_level', level); localStorage.setItem('gg_category', cat); localStorage.setItem('gg_count', n); } catch(e) {}
     data = await fetchQuestions(level, cat, n);
     statusPill.textContent = `Loaded ${data.length} questions`;
     startTime = Date.now();
@@ -233,5 +279,11 @@
   function getCookie(name){ const v = `; ${document.cookie}`.split(`; ${name}=`); if (v.length===2) return v.pop().split(';').shift(); }
 
   startBtn.addEventListener('click', start);
+  document.addEventListener('DOMContentLoaded', ()=>{
+    try {
+      const lv = localStorage.getItem('gg_level'); const ct = localStorage.getItem('gg_category'); const cn = localStorage.getItem('gg_count');
+      if (lv) levelSel.value = lv; if (ct) catSel.value = ct; if (cn) countSel.value = cn;
+    } catch(e) {}
+  });
 </script>
 {% endblock %}
