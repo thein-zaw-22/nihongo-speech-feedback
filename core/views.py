@@ -261,6 +261,11 @@ def index(request):
 
                 sentence = text_input
                 selected_provider = form.cleaned_data.get('llm_provider', 'gemini')
+                # Persist selection in session for future visits
+                try:
+                    request.session['llm_provider'] = selected_provider
+                except Exception:
+                    pass
                 raw = get_llm_feedback(sentence, selected_provider)
 
                 # Parse JSON feedback (with fallback slice)
@@ -276,6 +281,10 @@ def index(request):
                         logger.warning("Fallback JSON parse failed: %s", str(e))
                         feedback_data = {"corrected_text": sentence, "corrections": [], "raw": raw}
 
+                # Record which provider produced this feedback
+                if isinstance(feedback_data, dict):
+                    feedback_data['provider'] = selected_provider
+
                 record = Transcription.objects.create(
                     audio_file=audio if audio else None,
                     transcript=sentence,
@@ -283,10 +292,11 @@ def index(request):
                 )
                 logger.debug("Saved Transcription id=%s", record.id)
 
-                return redirect('feedback', pk=record.id)
+                # Redirect to feedback page, carrying provider for display
+                return redirect(f"/feedback/{record.id}/?provider={selected_provider}")
         else:
             # Get provider from URL parameter if available
-            selected_provider = request.GET.get('provider', 'gemini')
+            selected_provider = request.GET.get('provider') or request.session.get('llm_provider', 'gemini')
             form = AudioUploadForm(initial={'llm_provider': selected_provider})
 
         return render(request, 'index.html', {'form': form})
@@ -301,7 +311,7 @@ def feedback(request, pk):
         obj = Transcription.objects.get(pk=pk)
     except Transcription.DoesNotExist:
         return redirect('index')
-    selected_provider = request.GET.get('provider')
+    selected_provider = request.GET.get('provider') or (obj.feedback.get('provider') if isinstance(obj.feedback, dict) else None)
     return render(request, 'result.html', {'result': obj, 'selected_provider': selected_provider})
 
 

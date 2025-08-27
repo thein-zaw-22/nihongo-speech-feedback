@@ -39,7 +39,9 @@
 <div class="header">
   <h1>🎯 AI Feedback Results</h1>
   <p class="subtitle">Your Japanese text has been analyzed and improved</p>
-  {% if selected_provider %}<p class="subtitle">Model: {{ selected_provider|title }}</p>{% endif %}
+  {% with model=selected_provider|default:result.feedback.provider %}
+    {% if model %}<p class="subtitle">Model: {{ model|title }}</p>{% endif %}
+  {% endwith %}
 </div>
 
 {% if result.audio_file %}
