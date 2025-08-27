@@ -1,6 +1,13 @@
 from django import forms
 
 class AudioUploadForm(forms.Form):
+    LLM_CHOICES = [
+        ('openai', 'OpenAI (GPT-4o-mini)'),
+        ('gemini', 'Google Gemini (2.5-flash-lite)'),
+        ('bedrock', 'AWS Bedrock (Nova Lite)'),
+    ]
+    
+    llm_provider = forms.ChoiceField(choices=LLM_CHOICES, initial='gemini', widget=forms.Select(attrs={'style': 'width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;'}))
     audio_file = forms.FileField(required=False)
     text_input = forms.CharField(max_length=1000, required=False, widget=forms.Textarea(attrs={'rows': 3, 'placeholder': 'Enter Japanese text here...'}))
     

@@ -51,6 +51,14 @@
     <form id="audio-form" method="post" enctype="multipart/form-data">
       {% csrf_token %}
       
+      <!-- LLM Provider Selection -->
+      <div id="llm-section" style="margin-bottom: 2rem;">
+        <h3>Select AI Model</h3>
+        <div style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+          {{ form.llm_provider }}
+        </div>
+      </div>
+      
       <!-- Audio Input Section -->
       <div id="audio-section">
         <h3>Audio Input</h3>
