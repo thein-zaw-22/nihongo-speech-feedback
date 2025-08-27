@@ -232,6 +232,14 @@ def get_llm_feedback(transcript_text, provider=None):
     raise ValueError(f"Unsupported LLM provider: {provider}")
 
 @login_required
+def home(request):
+    # Dashboard with cards to routes
+    # Keep remembering provider selection for AI feedback card deep-link
+    selected_provider = request.session.get('llm_provider')
+    return render(request, 'home.html', {'selected_provider': selected_provider})
+
+
+@login_required
 def index(request):
     # Capture debug logs for this request
     logs = []
@@ -351,6 +359,24 @@ def history(request):
         if end_dt:
             items = items.filter(created_at__lte=end_dt)
     return render(request, 'history.html', {'items': items, 'start': start_str, 'end': end_str})
+
+
+@login_required
+def flashcard(request):
+    # Placeholder page for Flashcard feature
+    return render(request, 'flashcard.html')
+
+
+@login_required
+def pronunciation(request):
+    # Placeholder page for Pronunciation Coach
+    return render(request, 'pronunciation.html')
+
+
+@login_required
+def grammar_game(request):
+    # Placeholder page for Grammar Game
+    return render(request, 'grammar_game.html')
 
 
 def signup(request):

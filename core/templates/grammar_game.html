@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Grammar Game{% endblock %}
+{% block content %}
+<style>
+  .box { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; }
+  .muted { color: var(--text-secondary); }
+</style>
+
+<h1>🎮 Grammar Game</h1>
+<div class="box">
+  <p class="muted">This is a preview placeholder. Planned features include:</p>
+  <ul class="muted" style="margin-left:1rem;">
+    <li>Timed rounds with particle and verb-form challenges</li>
+    <li>Instant feedback with brief explanations</li>
+    <li>Difficulty scaling and streak bonuses</li>
+  </ul>
+  <p><a href="{% url 'home' %}">Back to Home</a></p>
+</div>
+{% endblock %}
+

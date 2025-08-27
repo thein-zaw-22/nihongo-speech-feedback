@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<style>
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .card { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; transition: transform .15s ease, box-shadow .2s ease; display:flex; flex-direction:column; gap:.5rem; }
+  .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+  .card h3 { margin:0; font-size:1rem; display:flex; align-items:center; gap:.5rem; }
+  .card p { margin:0; color: var(--text-secondary); font-size:.9rem; }
+  .actions { margin-top:auto; display:flex; gap:.5rem; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.6rem .9rem; border:none; border-radius:10px; font-weight:700; cursor:pointer; text-decoration:none; }
+  .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; }
+  .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+</style>
+
+<h1 style="margin-bottom:.5rem;">Welcome 👋</h1>
+<p class="subtitle" style="margin-bottom:1rem;">Choose a feature to get started.</p>
+
+<div class="grid">
+  <div class="card" style="border-color: rgba(72,187,120,.25);">
+    <h3>🗣️ AI Feedback for Speaking</h3>
+    <p>Record or type Japanese and get instant, natural corrections with explanations.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="{% url 'index' %}{% if selected_provider %}?provider={{ selected_provider }}{% endif %}">Open</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🃏 Flashcards</h3>
+    <p>Build vocabulary and review key phrases. Spaced repetition coming soon.</p>
+    <div class="actions">
+      <a class="btn btn-secondary" href="{% url 'flashcard' %}">Preview</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🎧 Pronunciation Coach</h3>
+    <p>Practice tricky sounds, see waveform and pitch hints, and get tips to sound more natural.</p>
+    <div class="actions">
+      <a class="btn btn-secondary" href="{% url 'pronunciation' %}">Preview</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🎮 Grammar Game</h3>
+    <p>Play quick rounds to master particles, verb forms, and natural phrasing.</p>
+    <div class="actions">
+      <a class="btn btn-secondary" href="{% url 'grammar_game' %}">Preview</a>
+    </div>
+  </div>
+
+  <div class="card" style="opacity:.75;">
+    <h3>✨ Others (Coming Soon)</h3>
+    <p>More tools to improve your Japanese speaking and writing.</p>
+    <div class="actions">
+      <button class="btn btn-secondary" disabled>Coming Soon</button>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}Flashcards{% endblock %}
+{% block content %}
+<style>
+  .box { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; }
+</style>
+
+<h1>🃏 Flashcards</h1>
+<div class="box">
+  <p>This is a placeholder for the Flashcard feature. Stay tuned!</p>
+  <p><a href="{% url 'home' %}">Back to Home</a></p>
+{% endblock %}
+
