@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    command: ./docker/entrypoint.sh python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
     ports:
@@ -26,6 +26,8 @@ services:
       POSTGRES_PASSWORD: whisper_pass
     volumes:
       - pgdata:/var/lib/postgresql/data/
+    ports:
+      - "127.0.0.1:5432:5432"
 
 volumes:
   pgdata:

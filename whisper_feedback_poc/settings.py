@@ -91,3 +91,8 @@ LOGGING = {
         'level': 'DEBUG',
     },
 }
+
+# Auth redirects (optional but improves UX)
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'

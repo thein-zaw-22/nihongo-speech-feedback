@@ -1,84 +1,109 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Feedback Result</title>
-  <style>
-    body { font-family: sans-serif; background: #f0f2f5; padding: 2rem; margin: 0; }
-    .container { background: #fff; padding: 2rem; border-radius: 8px; max-width: 800px; margin: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    audio { width: 100%; border-radius: 4px; margin-bottom: 1.5rem; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-    .panel { background: #fafafa; padding: 1rem; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-    .panel h3 { margin-top: 0; color: #333; }
-    textarea { width: 100%; border: none; background: transparent; resize: none; font-size: 1rem; color: #444; line-height: 1.4; padding: 0.5rem; min-height: 120px; }
-    p { font-size: 1rem; color: #444; line-height: 1.5; }
-    .explanations { list-style: none; padding: 0; margin-top: 1rem; text-align: left; }
-    .explanations li { margin-bottom: 1rem; }
-    .explanations .orig { color: #d9534f; text-decoration: line-through; margin-right: 0.5rem; }
-    .explanations .corr { color: #5cb85c; font-weight: bold; }
-    .explanations .exp { margin: 0.25rem 0 0 1.5rem; color: #666; font-size: 0.9rem; }
-    .btn { margin-top: 1.5rem; padding: 0.5rem 1rem; border: none; border-radius: 4px; background: #007bff; color: #fff; cursor: pointer; }
-    .btn:hover { background: #0056b3; }
-    .toggle-btn { margin-top: 1rem; }
-    .log-box { display: none; background: #222; color: #0f0; padding: 1rem; border-radius: 4px; font-family: monospace; font-size: 0.9rem; max-height: 200px; overflow-y: auto; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <!-- Audio Playback -->
-    {% if result.audio_file %}
+{% extends 'base.html' %}
+{% block title %}AI Feedback Results{% endblock %}
+{% block content %}
+<style>
+  /* Compact layout to match index */
+  .container { padding: 1rem; margin: 0.75rem auto; }
+  .header { text-align: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+  .header h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.35rem; background: linear-gradient(135deg, var(--brand), var(--brand-2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .header .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+  .audio-section { margin-bottom: 1rem; padding: 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 12px; border: 1px solid rgba(102, 126, 234, 0.1); }
+  .audio-player { width: 100%; border-radius: 10px; background: rgba(255, 255, 255, 0.8); padding: 0.5rem; }
+  .audio-player audio { width: 100%; height: 44px; border-radius: 8px; }
+  .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  .panel { background: var(--bg-secondary); padding: 1rem; border-radius: 12px; border: 1px solid var(--border-color); transition: all 0.3s ease; box-shadow: var(--shadow-sm); }
+  .panel:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .panel h3 { color: var(--text-primary); font-size: 1.05rem; font-weight: 600; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+  .panel h3::before { content: ''; width: 3px; height: 18px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); border-radius: 2px; }
+  .transcript-text { width: 100%; border: 2px solid var(--border-color); background: var(--bg-primary); resize: none; font-size: 0.95rem; color: var(--text-primary); line-height: 1.5; padding: 0.8rem; border-radius: 10px; min-height: 90px; font-family: inherit; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05); transition: all 0.3s ease; }
+  .transcript-text:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1), inset 0 2px 4px rgba(0, 0, 0, 0.05); }
+  .corrected-text { background: rgba(72, 187, 120, 0.1); padding: 0.8rem; border-radius: 10px; font-size: 0.95rem; line-height: 1.5; border-left: 3px solid #48bb78; margin-bottom: 0.75rem; border: 1px solid rgba(72, 187, 120, 0.2); color: var(--text-primary); font-weight: 500; transition: all 0.3s ease; }
+  .corrections-list { list-style: none; padding: 0; margin: 0; }
+  .correction-item { background: var(--bg-primary); margin-bottom: 0.75rem; padding: 1rem; border-radius: 10px; border-left: 3px solid var(--brand); transition: all 0.3s ease; border: 1px solid var(--border-color); }
+  .correction-item:hover { transform: translateX(3px); box-shadow: var(--shadow-sm); }
+  .correction-text { margin-bottom: 0.6rem; }
+  .original-text { color: #e53e3e; text-decoration: line-through; font-weight: 500; margin-right: 0.5rem; background: rgba(254, 215, 215, 0.8); padding: 0.2rem 0.45rem; border-radius: 6px; }
+  .corrected-text-inline { color: #38a169; font-weight: 600; background: rgba(198, 246, 213, 0.8); padding: 0.2rem 0.45rem; border-radius: 6px; }
+  .explanation { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-top: 0.4rem; padding: 0.6rem; background: var(--bg-secondary); border-radius: 8px; border-left: 3px solid var(--border-color); }
+  .no-corrections { text-align: center; color: #38a169; font-style: italic; padding: 1.2rem; background: rgba(198, 246, 213, 0.2); border-radius: 10px; border: 2px dashed #38a169; }
+  .no-corrections::before { content: '✅'; font-size: 2rem; display: block; margin-bottom: 0.5rem; }
+  .page-actions { display: flex; gap: 0.75rem; justify-content: center; align-items: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+  .page-actions .btn { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; padding:.65rem 1rem; border:none; border-radius:10px; font-size:.95rem; font-weight:600; cursor:pointer; transition:all .2s ease; text-decoration:none; min-width:120px; }
+  .page-actions .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; box-shadow: 0 3px 12px rgba(102,126,234,.3); }
+  .page-actions .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(102,126,234,.35); }
+  .page-actions .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.2); }
+  .page-actions .btn-secondary:hover { background: rgba(102,126,234,.18); transform: translateY(-1px); }
+  @media (max-width: 768px) { .results-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="header">
+  <h1>🎯 AI Feedback Results</h1>
+  <p class="subtitle">Your Japanese text has been analyzed and improved</p>
+  {% if selected_provider %}<p class="subtitle">Model: {{ selected_provider|title }}</p>{% endif %}
+</div>
+
+{% if result.audio_file %}
+  <div class="audio-section">
+    <div class="audio-player">
       <audio controls src="{{ result.audio_file.url }}"></audio>
-    {% endif %}
-
-    <!-- Two-column result display -->
-    <div class="grid">
-      <!-- Transcribed Text -->
-      <div class="panel">
-        <h3>Transcribed Text</h3>
-        <textarea readonly>{{ result.transcript }}</textarea>
-      </div>
-      <!-- Corrected Version + Explanations -->
-      <div class="panel">
-        <h3>Corrected Version</h3>
-        <p>{{ result.feedback.corrected_text }}</p>
-
-        <h3>Explanation</h3>
-        <ul class="explanations">
-          {% if result.feedback.corrections %}
-            {% for item in result.feedback.corrections %}
-            <li>
-              <span class="orig">{{ item.original }}</span>
-              <span class="corr">{{ item.corrected }}</span>
-              <p class="exp">{{ item.explanation }}</p>
-            </li>
-            {% endfor %}
-          {% else %}
-            <li><em>No corrections needed. Your sentence looks great!</em></li>
-          {% endif %}
-        </ul>
-      </div>
     </div>
+  </div>
+{% endif %}
 
-    <!-- Debug Logs -->
-    {% if logs %}
-      <button type="button" id="toggleLogs" class="btn toggle-btn">Show Debug Logs</button>
-      <pre id="logBox" class="log-box">{% for line in logs %}{{ line }}
-{% endfor %}</pre>
+<div class="results-grid">
+  <div class="panel">
+    <h3>📝 Original Text</h3>
+    <textarea class="transcript-text" readonly>{{ result.transcript }}</textarea>
+  </div>
+  <div class="panel">
+    <h3>✨ AI Corrected Version</h3>
+    <div class="corrected-text" id="correctedText">{{ result.feedback.corrected_text }}</div>
+    <button type="button" class="btn btn-copy" onclick="copyToClipboard('correctedText')" style="margin-top: 0.5rem; background: rgba(34, 197, 94, 0.1); color: #059669; border: 2px solid rgba(34, 197, 94, 0.2); padding: 0.5rem 1rem; font-size: 0.875rem; min-width: auto;">📋 Copy Text</button>
+    <h3 style="margin-top: 1.5rem;">💡 Explanations</h3>
+    {% if result.feedback.corrections %}
+      <ul class="corrections-list">
+        {% for item in result.feedback.corrections %}
+        <li class="correction-item">
+          <div class="correction-text">
+            <span class="original-text">{{ item.original }}</span>
+            <span class="corrected-text-inline">{{ item.corrected }}</span>
+          </div>
+          <div class="explanation">{{ item.explanation }}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="no-corrections">Perfect! Your Japanese text looks great as is.</div>
     {% endif %}
-
-    <button onclick="window.location.href='/?provider={{ selected_provider }}'" class="btn">Analyze Another</button>
+  </div>
   </div>
 
-  <script>
-    const toggleBtn = document.getElementById('toggleLogs');
-    const logBox = document.getElementById('logBox');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        const visible = logBox.style.display === 'block';
-        logBox.style.display = visible ? 'none' : 'block';
-        toggleBtn.textContent = visible ? 'Show Debug Logs' : 'Hide Debug Logs';
-      });
-    }
-  </script>
-</body>
-</html>
+<div class="page-actions">
+  <a href="/?provider={{ selected_provider }}" class="btn btn-primary">🔄 Analyze Another</a>
+  
+  {% if logs %}
+    <button type="button" id="toggleLogs" class="btn btn-secondary">🔍 Show Debug Logs</button>
+  {% endif %}
+</div>
+
+{% if logs %}
+  <div class="panel" style="margin-top:1rem;">
+    <div style="display:flex; align-items:center; justify-content: space-between; gap:.75rem;">
+      <h3 style="margin:0;">Debug Logs</h3>
+      <button type="button" id="toggleLogs2" class="btn btn-secondary">Show Debug Logs</button>
+    </div>
+    <pre id="logBox" class="debug-logs" style="display:none; background:#1a202c; color:#68d391; padding:1.5rem; border-radius:12px; font-family: 'Monaco', monospace; font-size:0.875rem; max-height:300px; overflow-y:auto; margin-top:1rem; border:1px solid #2d3748;">{% for line in logs %}{{ line }}
+{% endfor %}</pre>
+  </div>
+{% endif %}
+
+<script>
+  function copyToClipboard(id){const el=document.getElementById(id);const text=el.textContent||el.innerText;if(navigator.clipboard){navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}}
+  const toggleBtn = document.getElementById('toggleLogs');
+  const toggleBtn2 = document.getElementById('toggleLogs2');
+  const logBox = document.getElementById('logBox');
+  function toggle(){ if(!logBox) return; const visible = logBox.style.display==='block'; logBox.style.display = visible?'none':'block'; if(toggleBtn) toggleBtn.textContent = visible?'🔍 Show Debug Logs':'🙈 Hide Debug Logs'; if(toggleBtn2) toggleBtn2.textContent = visible?'Show Debug Logs':'Hide Debug Logs'; if(!visible) logBox.scrollTop = logBox.scrollHeight; }
+  if(toggleBtn) toggleBtn.addEventListener('click', toggle);
+  if(toggleBtn2) toggleBtn2.addEventListener('click', toggle);
+</script>
+{% endblock %}

@@ -1,147 +1,341 @@
-<!DOCTYPE html>
-<html>
-<head><title>Whisper Feedback POC</title>
+{% extends 'base.html' %}
+{% block title %}AI Japanese Feedback{% endblock %}
+{% block content %}
 <style>
-  body {
-    font-family: sans-serif;
-    background: #f0f2f5;
-    padding: 2rem;
-    margin: 0;
-  }
-  .container {
-    background: #fff;
-    padding: 2rem;
-    border-radius: 8px;
-    max-width: 480px;
-    margin: 2rem auto;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    text-align: center;
-  }
-  .btn {
-    display: inline-block;
-    padding: 0.5rem 1rem;
-    margin: 0.5rem;
+  /* Compact page layout to avoid scrolling */
+  .container { padding: 1rem; margin: 0.75rem auto; }
+  .section { margin-bottom: 0.75rem; padding: 0.9rem; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color); transition: all 0.3s ease; }
+  .section:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .section h3 { color: var(--text-primary); font-size: 1rem; font-weight: 600; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
+  .section h3::before { content: ''; width: 3px; height: 16px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); border-radius: 2px; }
+  select, textarea { width: 100%; padding: 0.7rem 0.9rem; border: 2px solid var(--border-color); border-radius: 10px; font-size: 0.95rem; transition: all 0.3s ease; background: var(--bg-primary); color: var(--text-primary); }
+  select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); transform: translateY(-1px); }
+  textarea { resize: vertical; min-height: 80px; font-family: inherit; line-height: 1.45; }
+  /* Scope button styles to this page to avoid affecting nav */
+  .index-page .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.65rem 1rem; margin: 0.2rem; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-decoration: none; min-width: 110px; }
+  .index-page .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: white; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); }
+  .index-page .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(102, 126, 234, 0.35); }
+  .index-page .btn-secondary { background: rgba(102, 126, 234, 0.1); color: var(--brand); border: 1px solid rgba(102, 126, 234, 0.2); }
+  .index-page .btn-secondary:hover:not(:disabled) { background: rgba(102, 126, 234, 0.18); transform: translateY(-1px); }
+  .index-page .btn-danger { background: rgba(239, 68, 68, 0.08); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.2); }
+  .index-page .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.16); transform: translateY(-1px); }
+  .index-page .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+  .index-page .btn-group { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; margin: 0.5rem 0; }
+  /* Toggle button styles */
+  .index-page .toggle-group { background: rgba(102,126,234,.08); border: 1px solid rgba(102,126,234,.25); border-radius: 9999px; padding: 4px; gap: .25rem; }
+  .index-page .toggle-group .toggle-indicator { position:absolute; top:4px; left:4px; height: calc(100% - 8px); width: calc(50% - 4px); border-radius: 9999px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); box-shadow: 0 4px 14px rgba(102,126,234,.35); transition: transform .25s ease; z-index: 0; }
+  .index-page .toggle-group .toggle-btn {
+    min-width: 130px;
+    padding: .5rem 1rem;
+    font-size: .9rem;
     border: none;
-    border-radius: 4px;
-    background: #007bff;
-    color: #fff;
-    font-size: 1rem;
-    cursor: pointer;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: background .2s ease, color .2s ease, transform .15s ease, box-shadow .2s ease;
+    position: relative;
+    z-index: 1;
   }
-  .btn:disabled {
-    background: #aaa;
-    cursor: not-allowed;
-  }
-  audio {
-    margin-top: 1rem;
-    width: 100%;
-    display: none;
-    border-radius: 4px;
-  }
-  .instructions {
-    margin-bottom: 1rem;
-    color: #555;
-  }
+  .index-page .toggle-group .toggle-btn:hover { background: rgba(102,126,234,.12); }
+  .index-page .toggle-group .toggle-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(102,126,234,.25); }
+  .index-page .toggle-group .toggle-btn.active { color: #fff; transform: translateY(-1px); }
+  /* Carousel for input sections */
+  .index-page .input-carousel { overflow: hidden; transition: height .28s ease; }
+  .index-page .input-track { display: flex; width: 200%; transition: transform .28s ease; will-change: transform; }
+  .index-page .input-track .slide { width: 50%; flex: 0 0 50%; opacity: 1; transition: opacity .25s ease; }
+  .index-page .input-track .slide.hidden { opacity: 0; pointer-events: none; }
+  .dropzone { border: 2px dashed var(--border-color); border-radius: 10px; padding: 1rem; text-align: center; transition: all 0.2s ease; background: var(--bg-secondary); cursor: pointer; }
+  .dropzone:hover, .dropzone.highlight { border-color: var(--brand); background: rgba(102, 126, 234, 0.05); transform: translateY(-1px); }
+  .dropzone-content { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+  .dropzone-icon { font-size: 1.6rem; color: #9ca3af; }
+  .dropzone-text { color: var(--text-secondary); font-weight: 500; }
+  .dropzone-subtext { color: var(--text-muted); font-size: 0.8rem; }
+  .audio-player { width: 100%; margin-top: 0.5rem; border-radius: 10px; display: none; background: rgba(102, 126, 234, 0.08); padding: .5rem; border: 1px solid rgba(102, 126, 234, 0.2); }
+  .audio-player audio { width: 100%; border-radius: 8px; }
+  .audio-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem; }
+  .audio-info { font-size: 0.875rem; color: var(--text-secondary); }
+  .recording-indicator { display: none; align-items: center; gap: 0.5rem; padding: 0.6rem; background: rgba(239, 68, 68, 0.1); border-radius: 10px; border: 1px solid rgba(239, 68, 68, 0.2); margin-top: 0.5rem; }
+  .recording-dot { width: 12px; height: 12px; border-radius: 50%; background: #ef4444; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);} 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);} 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);} }
+  .recording-text { color: #dc2626; font-weight: 600; }
+  .submit-section { text-align: center; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--border-color); }
+  .error { background: #fed7d7; color: #c53030; padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem; border-left: 4px solid #e53e3e; }
+  .subtitle { text-align: center; color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1rem; line-height: 1.45; }
+  @media (max-width: 640px) { .btn-group { flex-direction: column; } .btn { width: 100%; } .dropzone { padding: 0.9rem; } }
 </style>
-</head>
-<body>
-  <div class="container">
-    <h1>AI-Powered Japanese Speaking Feedback - POC</h1>
-    <p class="instructions">Record your Japanese sentence, upload an audio file, or enter text directly for analysis.</p>
-    <form id="audio-form" method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      
-      <!-- LLM Provider Selection -->
-      <div id="llm-section" style="margin-bottom: 2rem;">
-        <h3>Select AI Model</h3>
-        <div style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
-          {{ form.llm_provider }}
-        </div>
-      </div>
-      
-      <!-- Audio Input Section -->
-      <div id="audio-section">
-        <h3>Audio Input</h3>
-        <input type="file" id="fileInput" name="audio_file" accept="audio/*" style="display:none;">
-        <button type="button" id="record" class="btn">Record</button>
-        <button type="button" id="stop" class="btn" disabled>Stop</button>
-        <button type="button" id="upload" class="btn">Upload File</button>
-        <audio id="audioPlayback" controls></audio>
-      </div>
-      
-      <!-- Text Input Section -->
-      <div id="text-section" style="margin-top: 2rem;">
-        <h3>Text Input</h3>
-        <textarea id="textInput" name="text_input" rows="3" placeholder="Enter Japanese text here..." style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></textarea>
-      </div>
 
-      <div style="margin-top: 1rem;">
-        <button type="submit" id="submitBtn" class="btn" disabled>Submit for Analysis</button>
-      </div>
-    </form>
+<div class="index-page">
+<h1 style="text-align: center; font-size: 1.6rem; font-weight: 700; margin-bottom: 0.35rem; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">AI Japanese Feedback</h1>
+<p class="subtitle">Record audio, upload files, or enter text directly for AI-powered feedback analysis</p>
+
+{% if error %}
+  <div class="error">{{ error }}</div>
+{% endif %}
+
+<form id="audio-form" method="post" action="{% url 'index' %}" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="section">
+    <h3>🤖 Select AI Model</h3>
+    {{ form.llm_provider }}
   </div>
+
+  <!-- View Toggles -->
+  <div class="section" style="display:flex; align-items:center; justify-content:center; gap:.5rem;">
+    <div class="toggle-group" role="group" aria-label="Input toggles" style="display:flex; gap:.5rem; flex-wrap:wrap; position:relative;">
+      <span id="toggleIndicator" class="toggle-indicator" aria-hidden="true"></span>
+      <button type="button" id="toggleAudio" class="btn btn-secondary toggle-btn active" aria-pressed="true">🎤 Audio Input</button>
+      <button type="button" id="toggleText" class="btn btn-secondary toggle-btn" aria-pressed="false">✏️ Text Input</button>
+    </div>
+  </div>
+
+  <div class="input-carousel">
+    <div class="input-track" id="inputTrack">
+      <div class="slide" id="audioSlide">
+  <div id="audioSection" class="section">
+    <h3>🎤 Audio Input</h3>
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone-content">
+        <div class="dropzone-icon">🎵</div>
+        <div class="dropzone-text">Drag & drop audio file here</div>
+        <div class="dropzone-subtext">or click to browse files</div>
+      </div>
+    </div>
+    <input type="file" id="fileInput" name="audio_file" accept="audio/*" style="display:none;">
+    <div class="btn-group">
+      <button type="button" id="record" class="btn btn-secondary">🔴 Record</button>
+      <button type="button" id="stop" class="btn btn-secondary" disabled>⏹️ Stop</button>
+      <button type="button" id="upload" class="btn btn-secondary">📁 Upload File</button>
+      <button type="button" id="clear" class="btn btn-danger" style="display:none;">🗑️ Clear</button>
+    </div>
+    <div class="recording-indicator" id="recordingIndicator">
+      <div class="recording-dot"></div>
+      <div class="recording-text">Recording... <span id="timer">00:00</span></div>
+    </div>
+    <div class="audio-player" id="audioPlayer">
+      <audio id="audioPlayback" controls></audio>
+      <div class="audio-controls"><div class="audio-info" id="audioInfo"></div></div>
+    </div>
+  </div>
+
+  </div>
+      <div class="slide hidden" id="textSlide">
+  <div id="textSection" class="section">
+    <h3>✏️ Text Input</h3>
+    <textarea id="textInput" name="text_input" placeholder="Enter your Japanese text here for AI feedback...&#10;&#10;Example: 私は昨日映画を見ました。"></textarea>
+  </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="submit-section">
+    <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
+      <span id="submitText">🔍 Analyze</span>
+      <span id="loadingSpinner" style="display:none;">⏳ Analyzing...</span>
+    </button>
+    <div id="submitHint" class="subtitle" style="margin-top:.5rem;">Enter text or upload audio to analyze</div>
+  </div>
+</form>
+
+</div>
+
 <script>
   const recordBtn = document.getElementById('record');
   const stopBtn = document.getElementById('stop');
   const submitBtn = document.getElementById('submitBtn');
+  const clearBtn = document.getElementById('clear');
   const fileInput = document.getElementById('fileInput');
   const audioPlayback = document.getElementById('audioPlayback');
-  let mediaRecorder, chunks = [];
-
-  recordBtn.addEventListener('click', async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    chunks = [];
-    mediaRecorder.ondataavailable = e => chunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      const url = URL.createObjectURL(blob);
-      audioPlayback.src = url;
-      audioPlayback.style.display = 'block';
-      // Populate file input
-      const file = new File([blob], 'recording.webm', { type: 'audio/webm' });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      fileInput.files = dt.files;
-      submitBtn.disabled = false;
-    };
-    mediaRecorder.start();
-    recordBtn.disabled = true;
-    stopBtn.disabled = false;
-  });
-
-  stopBtn.addEventListener('click', () => {
-    mediaRecorder.stop();
-    recordBtn.disabled = false;
-    stopBtn.disabled = true;
-  });
-
-  const uploadBtn = document.getElementById('upload');
-
-  // Trigger file chooser on upload button click
-  uploadBtn.addEventListener('click', () => {
-    fileInput.click();
-  });
-
-  // Handle file selection from file input
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    audioPlayback.src = url;
-    audioPlayback.style.display = 'block';
-    checkSubmitButton();
-  });
-  
-  // Handle text input
   const textInput = document.getElementById('textInput');
-  textInput.addEventListener('input', checkSubmitButton);
-  
+  const dropzone = document.getElementById('dropzone');
+  const audioPlayer = document.getElementById('audioPlayer');
+  const audioInfo = document.getElementById('audioInfo');
+  const recordingIndicator = document.getElementById('recordingIndicator');
+  const timer = document.getElementById('timer');
+  const audioSection = document.getElementById('audioSection');
+  const textSection = document.getElementById('textSection');
+  const toggleAudio = document.getElementById('toggleAudio');
+  const toggleText = document.getElementById('toggleText');
+  const toggleIndicator = document.getElementById('toggleIndicator');
+  const inputTrack = document.getElementById('inputTrack');
+  const audioSlide = document.getElementById('audioSlide');
+  const textSlide = document.getElementById('textSlide');
+  let currentMode = null;
+  let mediaRecorder, chunks = []; let recordingStartTime; let timerInterval;
+
+  // Drag & Drop
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('highlight'); });
+  dropzone.addEventListener('dragleave', () => { dropzone.classList.remove('highlight'); });
+  dropzone.addEventListener('drop', (e) => { e.preventDefault(); dropzone.classList.remove('highlight'); const files = e.dataTransfer.files; if (files.length > 0) { fileInput.files = files; handleFileSelect(files[0]); }});
+
+  // Recording
+  recordBtn.addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream); chunks = [];
+      mediaRecorder.ondataavailable = e => chunks.push(e.data);
+      mediaRecorder.onstop = () => { const blob = new Blob(chunks, { type: 'audio/webm' }); const url = URL.createObjectURL(blob); audioPlayback.src = url; const file = new File([blob], 'recording.webm', { type: 'audio/webm' }); const dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files; showAudioPlayer(file); hideRecordingIndicator(); checkSubmitButton(); requestAnimationFrame(updateCarouselHeight); };
+      mediaRecorder.start(); recordBtn.disabled = true; stopBtn.disabled = false; showRecordingIndicator();
+    } catch (err) { console.error('Error accessing microphone:', err); alert('Could not access microphone. Please check permissions.'); }
+  });
+  stopBtn.addEventListener('click', () => { if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t => t.stop()); } recordBtn.disabled = false; stopBtn.disabled = true; });
+
+  document.getElementById('upload').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { const file = fileInput.files[0]; if (file) handleFileSelect(file); requestAnimationFrame(updateCarouselHeight); });
+  clearBtn.addEventListener('click', () => { fileInput.value = ''; audioPlayer.style.display = 'none'; clearBtn.style.display = 'none'; checkSubmitButton(); requestAnimationFrame(updateCarouselHeight); });
+  textInput.addEventListener('input', () => { checkSubmitButton(); requestAnimationFrame(updateCarouselHeight); });
+
+  function handleFileSelect(file) { const url = URL.createObjectURL(file); audioPlayback.src = url; showAudioPlayer(file); checkSubmitButton(); requestAnimationFrame(updateCarouselHeight); }
+  function showAudioPlayer(file) { audioPlayer.style.display = 'block'; clearBtn.style.display = 'inline-flex'; audioInfo.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`; }
+  function showRecordingIndicator() { recordingIndicator.style.display = 'flex'; recordingStartTime = Date.now(); timerInterval = setInterval(updateTimer, 1000); }
+  function hideRecordingIndicator() { recordingIndicator.style.display = 'none'; clearInterval(timerInterval); }
+  function updateTimer() { const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000); const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0'); const seconds = (elapsed % 60).toString().padStart(2, '0'); timer.textContent = `${minutes}:${seconds}`; }
   function checkSubmitButton() {
-    const hasAudio = fileInput.files.length > 0;
-    const hasText = textInput.value.trim().length > 0;
-    submitBtn.disabled = !(hasAudio || hasText);
+    const hasAudio = fileInput.files.length > 0; const hasText = textInput.value.trim().length > 0; const isEnabled = hasAudio || hasText;
+    submitBtn.disabled = !isEnabled; submitBtn.style.opacity = isEnabled ? '1' : '0.5';
+    const hint = document.getElementById('submitHint'); if (hint) { hint.style.display = submitBtn.disabled ? 'block' : 'none'; hint.textContent = hasText && hasAudio ? 'Ready to analyze both text and audio' : hasText ? 'Ready to analyze text' : hasAudio ? 'Ready to analyze audio' : 'Enter text or upload audio to analyze'; }
   }
+
+  // Section toggles
+  function setToggle(btn, on) {
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  function clearAudioInputs() {
+    fileInput.value = '';
+    audioPlayback.removeAttribute('src');
+    audioPlayer.style.display = 'none';
+    clearBtn.style.display = 'none';
+  }
+  function selectMode(mode) {
+    const audioOn = mode === 'audio';
+    const textOn = mode === 'text';
+    setToggle(toggleAudio, audioOn);
+    setToggle(toggleText, textOn);
+    // Pre-set wrapper height to target to avoid bounce
+    const wrapper = document.querySelector('.input-carousel');
+    if (wrapper) {
+      const target = textOn ? textSection : audioSection;
+      // Ensure both slides are visible for measuring and animation
+      if (audioSlide && textSlide) { audioSlide.classList.remove('hidden'); textSlide.classList.remove('hidden'); }
+      wrapper.style.height = target.offsetHeight + 'px';
+    }
+    // Slide the content carousel (after making both slides visible)
+    if (inputTrack) {
+      inputTrack.style.transform = audioOn ? 'translateX(0%)' : 'translateX(-50%)';
+      // After transition finishes, hide the inactive slide for a single-pane view
+      const offEl = audioOn ? textSlide : audioSlide;
+      inputTrack.addEventListener('transitionend', () => {
+        if (offEl) offEl.classList.add('hidden');
+        updateCarouselHeight();
+      }, { once: true });
+    }
+    // Move the indicator under the active toggle
+    if (toggleIndicator) toggleIndicator.style.transform = textOn ? 'translateX(100%)' : 'translateX(0)';
+    // Keep inputs in sync
+    if (audioOn) {
+      // Switching to audio: clear text
+      textInput.value = '';
+    } else {
+      // Switching to text: clear audio
+      clearAudioInputs();
+    }
+    checkSubmitButton();
+    currentMode = mode;
+    requestAnimationFrame(updateCarouselHeight);
+  }
+
+  function updateCarouselHeight(){
+    const wrapper = document.querySelector('.input-carousel');
+    if (!wrapper) return;
+    const activeEl = (currentMode === 'text') ? textSection : audioSection;
+    if (activeEl) wrapper.style.height = activeEl.offsetHeight + 'px';
+  }
+  toggleAudio.addEventListener('click', () => selectMode('audio'));
+  toggleText.addEventListener('click', () => selectMode('text'));
+  // Ensure default is audio mode and set initial height after layout
+  selectMode('audio');
+  window.addEventListener('load', () => requestAnimationFrame(updateCarouselHeight));
+  document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(updateCarouselHeight));
+  // Recompute height when recording indicator toggles
+  const origShow = showRecordingIndicator; const origHide = hideRecordingIndicator;
+  showRecordingIndicator = function(){ origShow(); requestAnimationFrame(updateCarouselHeight); };
+  hideRecordingIndicator = function(){ origHide(); requestAnimationFrame(updateCarouselHeight); };
+
+  // Swipe support (left/right) to switch modes
+  (function() {
+    const swipeTargets = [document.querySelector('.toggle-group'), document.querySelector('.input-carousel')].filter(Boolean);
+    let startX = 0, startY = 0, isSwiping = false;
+    const THRESHOLD = 50; // pixels
+
+    function onTouchStart(e){
+      if (!e.touches || e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      isSwiping = false;
+    }
+    function onTouchMove(e){
+      if (!e.touches || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+        // Horizontal intent detected; prevent vertical scroll from hijacking
+        e.preventDefault();
+        isSwiping = true;
+      }
+    }
+    function onTouchEnd(e){
+      if (!isSwiping) return;
+      const touch = (e.changedTouches && e.changedTouches[0]) || null;
+      if (!touch) return;
+      const dx = touch.clientX - startX;
+      if (Math.abs(dx) >= THRESHOLD) {
+        // Swipe left -> go to text; Swipe right -> go to audio
+        if (dx < 0) selectMode('text'); else selectMode('audio');
+      }
+      isSwiping = false;
+    }
+    swipeTargets.forEach(el => {
+      el.addEventListener('touchstart', onTouchStart, { passive: true });
+      el.addEventListener('touchmove', onTouchMove, { passive: false });
+      el.addEventListener('touchend', onTouchEnd, { passive: true });
+    });
+
+    // Mouse drag support for desktop
+    let mouseDown = false;
+    function onMouseDown(e){ mouseDown = true; startX = e.clientX; startY = e.clientY; isSwiping = false; }
+    function onMouseMove(e){ if(!mouseDown) return; const dx = e.clientX - startX; const dy = e.clientY - startY; if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) { e.preventDefault(); isSwiping = true; } }
+    function onMouseUp(e){ if(!mouseDown) return; mouseDown = false; if(!isSwiping) return; const dx = e.clientX - startX; if (Math.abs(dx) >= THRESHOLD) { if (dx < 0) selectMode('text'); else selectMode('audio'); } isSwiping = false; }
+    swipeTargets.forEach(el => {
+      el.addEventListener('mousedown', onMouseDown);
+      el.addEventListener('mousemove', onMouseMove);
+      el.addEventListener('mouseup', onMouseUp);
+      el.addEventListener('mouseleave', onMouseUp);
+    });
+  })();
+
+  // Loading UI on submit (do NOT disable inputs to preserve form data)
+  (function() {
+    const form = document.getElementById('audio-form'); if (!form) return;
+    function setSubmittingUI() {
+      if (form.dataset.submitting === '1') return false;
+      const submitText = document.getElementById('submitText');
+      const loadingSpinner = document.getElementById('loadingSpinner');
+      if (submitText) submitText.style.display = 'none';
+      if (loadingSpinner) loadingSpinner.style.display = 'inline';
+      form.dataset.submitting = '1';
+      return true;
+    }
+    submitBtn.addEventListener('click', () => { if (!submitBtn.disabled) setSubmittingUI(); });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) { if (!submitBtn.disabled) setSubmittingUI(); }});
+    form.addEventListener('submit', function() { if (form.dataset.submitting === '1') return; setSubmittingUI(); });
+  })();
+
+  // Initial check
+  checkSubmitButton();
+
+  // Shortcuts + DnD page feedback
+  document.addEventListener('keydown', function(e) { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { if (!submitBtn.disabled) { const form = document.getElementById('audio-form'); const submitText = document.getElementById('submitText'); const loadingSpinner = document.getElementById('loadingSpinner'); if (submitText) submitText.style.display = 'none'; if (loadingSpinner) loadingSpinner.style.display = 'inline'; requestAnimationFrame(() => setTimeout(() => form.submit(), 40)); } } if (e.key === 'Escape') { if (clearBtn.style.display !== 'none') { clearBtn.click(); } } });
+  let dragCounter = 0; document.addEventListener('dragenter', function(e) { e.preventDefault(); dragCounter++; document.body.style.background = 'linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))'; }); document.addEventListener('dragleave', function(e) { e.preventDefault(); dragCounter--; if (dragCounter === 0) { document.body.style.background = ''; } }); document.addEventListener('drop', function(e) { e.preventDefault(); dragCounter = 0; document.body.style.background = ''; });
 </script>
-</body>
-</html>
+{% endblock %}

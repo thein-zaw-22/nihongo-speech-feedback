@@ -1,12 +1,16 @@
 import os
 import json
 import boto3
+import tempfile
 from botocore.exceptions import ClientError
 from openai import OpenAI
 import google.generativeai as genai
 import logging
 from logging import Formatter
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import login as auth_login
 from .forms import AudioUploadForm
 from .models import Transcription
 
@@ -53,7 +57,37 @@ def get_client(provider):
         raise ValueError(f"Unsupported LLM provider: {provider}")
 # --------------------------------
 
-# Whisper not available on Vercel - text input only
+# Whisper transcription support
+try:
+    import whisper
+except Exception:
+    whisper = None
+
+_whisper_model = None
+
+def get_whisper_model():
+    global _whisper_model
+    if whisper is None:
+        raise RuntimeError("Whisper is not available in this environment")
+    if _whisper_model is None:
+        _whisper_model = whisper.load_model(os.getenv("WHISPER_MODEL", "base"))
+    return _whisper_model
+
+def transcribe_audio(uploaded_file):
+    suffix = os.path.splitext(uploaded_file.name)[1] or ".wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        for chunk in uploaded_file.chunks():
+            tmp.write(chunk)
+        tmp_path = tmp.name
+    try:
+        model = get_whisper_model()
+        result = model.transcribe(tmp_path, fp16=False, language='ja')
+        return (result.get('text') or '').strip()
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 def get_openai_feedback(transcript_text):
     """Gets feedback from OpenAI's GPT model."""
@@ -194,6 +228,7 @@ def get_llm_feedback(transcript_text, provider=None):
     # This should not be reached due to the initial check
     raise ValueError(f"Unsupported LLM provider: {provider}")
 
+@login_required
 def index(request):
     # Capture debug logs for this request
     logs = []
@@ -208,43 +243,27 @@ def index(request):
     try:
         logger.debug("Index view called, method=%s", request.method)
         if request.method == 'POST':
-            logger.debug("Received POST request with audio upload")
+            logger.debug("Received POST request for analysis")
             form = AudioUploadForm(request.POST, request.FILES)
             if form.is_valid():
                 audio = form.cleaned_data.get('audio_file')
-                text_input = form.cleaned_data.get('text_input')
-                
-                if text_input:
-                    # Direct text input - no transcription needed
-                    sentence = text_input.strip()
-                    logger.debug("Using direct text input: %s", sentence.replace('\n', '').replace('\r', '')[:100])
-                else:
-                    # Audio input - transcribe with Whisper
-                    logger.debug("Form is valid. Audio file: %s", audio.name.replace('\n', '').replace('\r', ''))
-                    tmp_path = None
+                text_input = (form.cleaned_data.get('text_input') or '').strip()
+                if not text_input and audio:
                     try:
-                        # Save uploaded file to a temporary file that is not deleted on close
-                        suffix = os.path.splitext(audio.name)[1] or '.wav'
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-                            for chunk in audio.chunks():
-                                tmp_file.write(chunk)
-                            tmp_path = tmp_file.name
-                        logger.debug("Saved uploaded file to %s", tmp_path.replace('\n', '').replace('\r', ''))
+                        text_input = transcribe_audio(audio)
+                        logger.debug("Transcribed audio to: %s", text_input[:100].replace('\n',' '))
+                    except Exception as e:
+                        logger.error("Transcription failed: %s", str(e))
+                        return render(request, 'index.html', {'form': form, 'error': f'Transcription failed: {str(e)}'})
 
-                        # Transcribe with Whisper (explicitly set to Japanese)
-                        result = model.transcribe(tmp_path, language='ja')
-                        sentence = result.get('text', '')
-                        logger.debug("Transcribed sentence: %s", sentence.replace('\n', '').replace('\r', '')[:100])
-                    finally:
-                        if tmp_path and os.path.exists(tmp_path):
-                            logger.debug("Cleaning up temporary file: %s", tmp_path.replace('\n', '').replace('\r', ''))
-                            os.remove(tmp_path)
+                if not text_input:
+                    return render(request, 'index.html', {'form': form, 'error': 'Please enter text or upload audio for analysis.'})
 
-                # Get feedback from the selected LLM provider
+                sentence = text_input
                 selected_provider = form.cleaned_data.get('llm_provider', 'gemini')
                 raw = get_llm_feedback(sentence, selected_provider)
 
-                # Parse JSON feedback (with fallback to clean JSON substring)
+                # Parse JSON feedback (with fallback slice)
                 try:
                     feedback_data = json.loads(raw)
                 except json.JSONDecodeError:
@@ -253,21 +272,16 @@ def index(request):
                         end = raw.rfind('}') + 1
                         snippet = raw[start:end]
                         feedback_data = json.loads(snippet)
-                    except json.JSONDecodeError:
-                        feedback_data = {
-                            "corrected_text": sentence,
-                            "corrections": [],
-                            "raw": raw
-                        }
-                        logger.debug("Failed to parse JSON, using raw feedback and assuming no corrections")
+                    except Exception as e:
+                        logger.warning("Fallback JSON parse failed: %s", str(e))
+                        feedback_data = {"corrected_text": sentence, "corrections": [], "raw": raw}
 
-                # Save result
                 record = Transcription.objects.create(
-                    audio_file=audio,
+                    audio_file=audio if audio else None,
                     transcript=sentence,
-                    feedback=feedback_data
+                    feedback=feedback_data,
                 )
-                logger.debug("Transcription record created with id %s", str(record.id))
+                logger.debug("Saved Transcription id=%s", record.id)
 
                 return render(request, 'result.html', {'result': record, 'logs': logs, 'selected_provider': selected_provider})
         else:
@@ -279,3 +293,15 @@ def index(request):
 
     finally:
         logger.removeHandler(handler)
+
+
+def signup(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            auth_login(request, user)
+            return redirect('index')
+    else:
+        form = UserCreationForm()
+    return render(request, 'registration/signup.html', {'form': form})
