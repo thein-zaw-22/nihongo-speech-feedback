@@ -1,0 +1,52 @@
+{% if user.is_authenticated %}
+<aside id="sidebar" class="sidebar" aria-label="Sidebar">
+  <div class="sidebar-inner">
+    <div class="sidebar-section" style="padding:.2rem .2rem .4rem .2rem;">
+      <button id="sidebarCollapseBtn" class="sidebar-header" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <span class="chev">⟨</span>
+        <span class="sidebar-title">Collapse</span>
+      </button>
+    </div>
+    <div class="sidebar-section" data-section="general">
+      <button class="sidebar-header" type="button" aria-controls="sb-general" aria-expanded="true">
+        <span class="chev">▾</span>
+        <span class="sidebar-title">General</span>
+      </button>
+      <div id="sb-general" class="sidebar-body">
+        <a href="{% url 'index' %}" class="sidebar-link{% if request.resolver_match.url_name == 'index' %} active{% endif %}"><span class="icon">💬</span><span class="label">AI Feedback</span></a>
+        <a href="{% url 'batch_history' %}" class="sidebar-link{% if request.resolver_match.url_name == 'batch_history' %} active{% endif %}"><span class="icon">📦</span><span class="label">Batch Corrections</span></a>
+        <a href="{% url 'history' %}" class="sidebar-link{% if request.resolver_match.url_name == 'history' %} active{% endif %}"><span class="icon">🕘</span><span class="label">Feedback History</span></a>
+      </div>
+    </div>
+    <div class="sidebar-section" data-section="practice">
+      <button class="sidebar-header" type="button" aria-controls="sb-practice" aria-expanded="true">
+        <span class="chev">▾</span>
+        <span class="sidebar-title">Practice</span>
+      </button>
+      <div id="sb-practice" class="sidebar-body">
+        <a href="{% url 'grammar_game' %}" class="sidebar-link{% if request.resolver_match.url_name == 'grammar_game' %} active{% endif %}"><span class="icon">🎮</span><span class="label">Grammar Trainer</span></a>
+        <a href="{% url 'grammar_history' %}" class="sidebar-link{% if request.resolver_match.url_name == 'grammar_history' %} active{% endif %}"><span class="icon">📈</span><span class="label">Grammar Stats</span></a>
+        <a href="{% url 'flashcard' %}" class="sidebar-link{% if request.resolver_match.url_name == 'flashcard' %} active{% endif %}"><span class="icon">🃏</span><span class="label">Flashcards</span></a>
+        <a href="{% url 'pronunciation' %}" class="sidebar-link{% if request.resolver_match.url_name == 'pronunciation' %} active{% endif %}"><span class="icon">🎧</span><span class="label">Pronunciation</span></a>
+      </div>
+    </div>
+    {% if user.is_authenticated %}
+    <div class="sidebar-section" data-section="account">
+      <button class="sidebar-header" type="button" aria-controls="sb-account" aria-expanded="true">
+        <span class="chev">▾</span>
+        <span class="sidebar-title">Account</span>
+      </button>
+      <div class="sidebar-body" id="sb-account">
+        <a href="{% url 'profile' %}" class="sidebar-link{% if request.resolver_match.url_name == 'profile' %} active{% endif %}"><span class="icon">👤</span><span class="label">Profile</span></a>
+        <a href="{% url 'password_update' %}" class="sidebar-link{% if request.resolver_match.url_name == 'password_update' %} active{% endif %}"><span class="icon">🔐</span><span class="label">Password</span></a>
+        <form action="{% url 'logout' %}" method="post" style="margin-top:.5rem; padding-top:.5rem; border-top:1px solid var(--border-color);">
+          {% csrf_token %}
+          <button class="sidebar-link warn" type="submit"><span class="icon">🚪</span><span class="label">Logout</span></button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  </div>
+</aside>
+{% endif %}

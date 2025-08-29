@@ -50,6 +50,24 @@
   .dropzone-icon { font-size: 1.6rem; color: #9ca3af; }
   .dropzone-text { color: var(--text-secondary); font-weight: 500; }
   .dropzone-subtext { color: var(--text-muted); font-size: 0.8rem; }
+  /* Attention animation for Download Result */
+  @keyframes pulseNotice {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(102,126,234,.0); }
+    50% { transform: scale(1.03); box-shadow: 0 0 0 6px rgba(102,126,234,.12); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(102,126,234,.0); }
+  }
+  #batchDownload.attention { animation: pulseNotice .9s ease-in-out 4; }
+  @media (prefers-reduced-motion: reduce) {
+    #batchDownload.attention { animation: none; }
+  }
+  /* Compact batch dropzone */
+  #batchDropzone { padding: .6rem .8rem; }
+  #batchDropzone .dropzone-content { gap: .35rem; }
+  #batchDropzone .dropzone-icon { font-size: 1.2rem; }
+  #batchDropzone .dropzone-text { font-size: .9rem; }
+  #batchDropzone .dropzone-subtext { font-size: .75rem; }
+  #batchDropzone.has-file { border-color: var(--brand); background: rgba(102,126,234,.08); box-shadow: 0 0 0 3px rgba(102,126,234,.12); }
+  #batchDropzone.has-file #batchChosen { color: var(--brand); }
   .audio-player { width: 100%; margin-top: 0.5rem; border-radius: 10px; display: none; background: rgba(102, 126, 234, 0.08); padding: .5rem; border: 1px solid rgba(102, 126, 234, 0.2); }
   .audio-player audio { width: 100%; border-radius: 8px; }
   .audio-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem; }
@@ -116,8 +134,9 @@
       <div id="batchProgressBar" style="height:100%; width:0%; background: linear-gradient(135deg, var(--brand), var(--brand-2)); transition: width .3s ease;"></div>
     </div>
     <div id="batchStatusText" style="margin-top:.4rem; color: var(--text-muted); font-size:.9rem;"></div>
-    <div class="index-page btn-group" style="justify-content:flex-start; margin-top:.5rem;">
+    <div class="index-page btn-group" style="justify-content:flex-start; align-items:center; gap:.35rem; margin-top:.5rem;">
       <a id="batchDownload" class="btn btn-secondary" href="#" style="display:none;">Download Result</a>
+      <span id="batchNewBadge" class="badge-new" style="display:none;">New</span>
       <button id="batchCancelBtn" type="button" class="btn btn-danger" style="display:none;">Cancel Job</button>
       <a class="btn btn-secondary" href="{% url 'batch_history' %}">View History</a>
     </div>
@@ -447,6 +466,10 @@
           clearInterval(pollTimer); pollTimer = null;
           dl.href = data.download_url;
           dl.style.display = 'inline-flex';
+          // Draw attention to the Download button briefly
+          dl.classList.add('attention');
+          setTimeout(()=> dl.classList.remove('attention'), 4000);
+          if (typeof newBadge !== 'undefined' && newBadge) { newBadge.style.display = 'inline-flex'; setTimeout(()=>{ newBadge.style.display='none'; }, 5000); }
           cancelBtn.style.display = 'none';
           submitBtn.disabled = false;
           submitBtn.textContent = 'Process File';
@@ -459,6 +482,7 @@
           statusText.textContent = `Failed: ${data.error || 'Unknown error'}`;
           cancelBtn.style.display = 'none';
           try { localStorage.removeItem('activeBatchJobId'); } catch(e) {}
+          if (typeof newBadge !== 'undefined' && newBadge) newBadge.style.display = 'none';
           if (window.showToast) showToast(`Batch failed: ${data.error || 'Unknown'}`, 'error');
         } else if (data.status === 'canceled'){
           clearInterval(pollTimer); pollTimer = null;
@@ -467,6 +491,7 @@
           statusText.textContent = 'Canceled by user.';
           cancelBtn.style.display = 'none';
           try { localStorage.removeItem('activeBatchJobId'); } catch(e) {}
+          if (typeof newBadge !== 'undefined' && newBadge) newBadge.style.display = 'none';
           if (window.showToast) showToast('Batch canceled.', 'warn');
         } else {
           // running or pending
@@ -582,9 +607,11 @@
         fileNameEl.textContent = `${f.name} (${humanSize(f.size)})`;
         selectedWrap.style.display = 'block';
         if (chosenEl){ chosenEl.textContent = `Selected: ${f.name} (${humanSize(f.size)})`; chosenEl.style.display = 'block'; }
+        if (dz) dz.classList.add('has-file');
       } else {
         selectedWrap.style.display = 'none';
         if (chosenEl){ chosenEl.style.display = 'none'; }
+        if (dz) dz.classList.remove('has-file');
       }
     }
     // Wrap to avoid passing the Event object directly to updateSelected

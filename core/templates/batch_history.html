@@ -22,7 +22,7 @@
         <td style="padding:.5rem;">{{ j.id }}</td>
         <td style="padding:.5rem;">{{ j.input_file.name|cut:"batch/" }}</td>
         <td style="padding:.5rem;">{{ j.provider }}</td>
-        <td style="padding:.5rem;">{{ j.status|title }}</td>
+        <td style="padding:.5rem;{% if j.status == 'canceled' %} color:#b91c1c; font-weight:700;{% endif %}">{{ j.status|title }}</td>
         <td style="padding:.5rem;">{{ j.processed_rows }}/{{ j.total_rows }} ({{ j.progress_percent }}%)</td>
         <td style="padding:.5rem;">{{ j.created_at|date:"Y-m-d H:i" }}</td>
         <td style="padding:.5rem;">{{ j.updated_at|date:"Y-m-d H:i" }}</td>
@@ -51,4 +51,3 @@
   
 </div>
 {% endblock %}
-

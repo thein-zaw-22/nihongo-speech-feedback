@@ -8,7 +8,7 @@ import google.generativeai as genai
 import logging
 from logging import Formatter
 import time
-from collections import deque
+from collections import deque, defaultdict
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from datetime import datetime as dt_datetime, time as dt_time
@@ -112,6 +112,55 @@ def _call_llm_with_limits(text: str, provider: str):
             raise
 # ----------------------------------------------------------------
 
+# ---------------- RPM limits loaded from .env ----------------
+# These are per-model RPM (requests per minute) caps.
+RPM_LIMITS = {
+    "openai:gpt-4o": int(os.getenv("OPENAI_GPT4O_RPM", 1000)),
+    "openai:gpt-4o-mini": int(os.getenv("OPENAI_GPT4O_MINI_RPM", 3500)),
+    "gemini:gemini-2.5-flash-lite": int(os.getenv("GEMINI_25_FLASH_LITE_RPM", 15)),
+    "aws:nova-lite": int(os.getenv("AWS_NOVA_LITE_RPM", 1000)),
+}
+
+class _RPMWindowLimiter:
+    def __init__(self):
+        self._hits = defaultdict(deque)  # key -> deque[timestamps]
+
+    def wait(self, key: str):
+        rpm = RPM_LIMITS.get(key)
+        if not rpm or rpm <= 0:
+            return
+        window = 60.0
+        dq = self._hits[key]
+        now = time.monotonic()
+        # prune
+        while dq and (now - dq[0]) >= window:
+            dq.popleft()
+        if len(dq) >= rpm:
+            sleep_for = window - (now - dq[0]) + 0.005
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            # prune again after sleep
+            now = time.monotonic()
+            while dq and (now - dq[0]) >= window:
+                dq.popleft()
+        dq.append(time.monotonic())
+
+_rpm_limiter = _RPMWindowLimiter()
+
+def _rpm_key(provider: str, model_id: str) -> str:
+    p = (provider or '').lower()
+    m = (model_id or '').lower()
+    if p == 'bedrock' or p == 'aws':
+        # Map any nova-lite variants to aws:nova-lite
+        if 'nova-lite' in m:
+            return 'aws:nova-lite'
+        return f'aws:{m}'
+    elif p == 'gemini':
+        return f'gemini:{m}'
+    elif p == 'openai':
+        return f'openai:{m}'
+    return f'{p}:{m}'
+
 def get_client(provider):
     """Get client for the specified provider."""
     if provider == "openai":
@@ -175,6 +224,8 @@ def transcribe_audio(uploaded_file):
 def get_openai_feedback(transcript_text):
     """Gets feedback from OpenAI's GPT model."""
     client = get_client("openai")
+    model_name = "gpt-4o-mini"
+    _rpm_limiter.wait(_rpm_key('openai', model_name))
     messages = [
         {"role": "system", "content": (
             "You are a professional Japanese language tutor. "
@@ -192,7 +243,7 @@ def get_openai_feedback(transcript_text):
     ]
     logger.debug("Sending messages to OpenAI: %s", messages)
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model_name,
         messages=messages
     )
     return response.choices[0].message.content
@@ -200,6 +251,7 @@ def get_openai_feedback(transcript_text):
 def get_gemini_feedback(transcript_text):
     """Gets feedback from Google Gemini model."""
     client = get_client("gemini")
+    _rpm_limiter.wait(_rpm_key('gemini', GEMINI_MODEL_ID))
     prompt = (
         "You are a professional Japanese language tutor. "
         "Your task is to correct Japanese sentences to be more natural. "
@@ -227,6 +279,7 @@ def get_gemini_feedback(transcript_text):
 def get_bedrock_feedback(transcript_text):
     """Gets feedback from Amazon Bedrock using the Converse API."""
     client = get_client("bedrock")
+    _rpm_limiter.wait(_rpm_key('bedrock', BEDROCK_MODEL_ID))
     system_prompt = (
         "You are a professional Japanese language tutor. "
         "Your task is to correct Japanese sentences to be more natural. "
@@ -553,6 +606,7 @@ def grammar_explain(request):
         try:
             if provider == 'openai':
                 client = get_client('openai')
+                _rpm_limiter.wait(_rpm_key('openai', 'gpt-4o-mini'))
                 resp = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[{"role":"system","content":system},{"role":"user","content":user}]
@@ -560,9 +614,11 @@ def grammar_explain(request):
                 raw = resp.choices[0].message.content
             elif provider == 'gemini':
                 client = get_client('gemini')
+                _rpm_limiter.wait(_rpm_key('gemini', GEMINI_MODEL_ID))
                 raw = client.generate_content(system + "\n\n" + user).text
             elif provider == 'bedrock':
                 client = get_client('bedrock')
+                _rpm_limiter.wait(_rpm_key('bedrock', BEDROCK_MODEL_ID))
                 resp = client.converse(
                     modelId=BEDROCK_MODEL_ID,
                     messages=[{"role":"user","content":[{"text":user}]}],

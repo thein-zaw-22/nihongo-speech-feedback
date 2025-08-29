@@ -36,6 +36,15 @@ echo "AWS_SESSION_TOKEN=..." >> .env
 # Nova requires an inference profile (use the exact ARN/ID from the Bedrock console)
 echo "BEDROCK_MODEL_ID=amazon.nova-lite-v1:0" >> .env
 echo "BEDROCK_INFERENCE_PROFILE_ARN=arn:aws:bedrock:<region>:aws:inference-profile/amazon.nova-lite-v1:0" >> .env
+
+RPM limits (Requests Per Minute):
+```bash
+# Per-model caps used by the in-app limiter
+echo "OPENAI_GPT4O_RPM=1000" >> .env
+echo "OPENAI_GPT4O_MINI_RPM=3500" >> .env
+echo "GEMINI_25_FLASH_LITE_RPM=15" >> .env
+echo "AWS_NOVA_LITE_RPM=1000" >> .env
+```
 ```
 
 2) Build containers and run migrations once:
@@ -91,6 +100,11 @@ python manage.py runserver
   - `AWS_SESSION_TOKEN`: Optional, if using temporary credentials.
   - `BEDROCK_MODEL_ID`: Bedrock model ID for the Converse API. Defaults to `amazon.nova-lite-v1:0`. You must enable access to the chosen model in the Bedrock Console for your AWS account and region.
   - `BEDROCK_INFERENCE_PROFILE_ARN`: Required for Nova models. Set an inference profile ARN or ID and the app will call Converse with that profile. The app does not fall back to on-demand `modelId` for Bedrock.
+  - Per-model RPM caps for the simple limiter (Requests Per Minute):
+    - `OPENAI_GPT4O_RPM` (default 1000)
+    - `OPENAI_GPT4O_MINI_RPM` (default 3500)
+    - `GEMINI_25_FLASH_LITE_RPM` (default 15)
+    - `AWS_NOVA_LITE_RPM` (default 1000)
 
 - Django settings highlights:
   - `SECRET_KEY` is a placeholder in code; change it for any non-local use

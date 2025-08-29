@@ -1,0 +1,41 @@
+<nav class="topnav" role="navigation" aria-label="Main">
+  <div class="topnav-row">
+    {% if user.is_authenticated %}
+    <button class="nav-burger" id="sidebarToggle" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="false">☰</button>
+    {% endif %}
+    <a href="{% url 'home' %}" class="brand">🎯 AI Feedback</a>
+    <div class="nav-actions">
+      <a class="btn btn-secondary" href="{% url 'home' %}">Home</a>
+      {% if user.is_authenticated %}
+        <div class="profile-wrap">
+          <div class="btn btn-secondary profile-trigger" aria-haspopup="true" aria-expanded="false" tabindex="0">
+            <span class="avatar">
+              {% if user_avatar_url %}
+                <img src="{{ user_avatar_url }}" alt="avatar" />
+              {% else %}
+                {{ user.username|slice:":1"|upper }}
+              {% endif %}
+            </span>
+            <span class="username">{{ user.username }}</span>
+            <span class="caret">▾</span>
+          </div>
+          <div class="dropdown" role="menu">
+            <a href="{% url 'profile' %}">Profile</a>
+            <a href="{% url 'password_update' %}">Change Password</a>
+            <form action="{% url 'logout' %}" method="post" style="margin:0;">
+              {% csrf_token %}
+              <button type="submit">Logout</button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <a class="btn btn-secondary" href="{% url 'login' %}">Login</a>
+      {% endif %}
+      <select id="themeSelect" class="theme-select" aria-label="Theme">
+        <option value="system">Auto</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  </div>
+</nav>
