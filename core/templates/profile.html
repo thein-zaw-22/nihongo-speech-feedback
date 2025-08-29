@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Profile · AI Japanese Feedback{% endblock %}
 {% block content %}
 <style>
@@ -9,6 +10,8 @@
   .avatar-inline-preview .head .title { font-weight: 700; color: var(--text-secondary); }
   .avatar-inline-preview .close { appearance: none; border: none; background: rgba(102,126,234,.1); color: var(--brand); border:1px solid rgba(102,126,234,.25); padding: .3rem .6rem; border-radius: 8px; cursor: pointer; }
   .avatar-inline-preview img { display:block; max-width: 100%; height: auto; max-height: 360px; border-radius: 8px; margin: 0 auto; object-fit: contain; }
+  .avatar-edit-btn:hover { background: var(--bg-secondary); transform: scale(1.05); transition: all 0.2s ease; }
+  [data-theme="dark"] .avatar-edit-btn img { filter: invert(1); }
 </style>
 
 <h1 style="font-size:1.25rem; margin-bottom:1rem;">Profile</h1>
@@ -18,18 +21,22 @@
 
   <div style="display:flex; gap:1.25rem; align-items:flex-start;">
     <div style="min-width:120px; text-align:center;">
-      <div id="avatarClickTarget" style="width:96px;height:96px;border-radius:50%;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.12);background:linear-gradient(135deg, var(--brand), var(--brand-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.6rem;margin:0 auto; cursor: pointer;" title="Click to view full size" role="button" tabindex="0">
-        {% if profile.avatar %}
-          <img id="avatarPreview" src="{{ profile.avatar.url }}" alt="avatar" style="width:100%;height:100%;object-fit:cover;display:block;" />
-        {% else %}
-          <span id="avatarInitial">{{ user.username|slice:":1"|upper }}</span>
-          <img id="avatarPreview" src="" alt="avatar" style="width:100%;height:100%;object-fit:cover;display:none;" />
-        {% endif %}
+      <div class="avatar-container" style="position:relative; width:96px; height:96px; margin:0 auto;">
+        <div id="avatarClickTarget" style="width:100%;height:100%;border-radius:50%;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.12);background:linear-gradient(135deg, var(--brand), var(--brand-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.6rem; cursor: pointer;" title="Click to view full size" role="button" tabindex="0">
+          {% if profile.avatar %}
+            <img id="avatarPreview" src="{{ profile.avatar.url }}" alt="avatar" style="width:100%;height:100%;object-fit:cover;display:block;" />
+          {% else %}
+            <span id="avatarInitial">{{ user.username|slice:":1"|upper }}</span>
+            <img id="avatarPreview" src="" alt="avatar" style="width:100%;height:100%;object-fit:cover;display:none;" />
+          {% endif %}
+        </div>
+        <label for="id_avatar" class="avatar-edit-btn" style="position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--bg-primary); border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.15);" title="Edit profile picture">
+          <img src="{% static 'core/edit-icon.svg' %}" alt="Edit" width="14" height="14">
+        </label>
       </div>
-      <div style="margin-top:.6rem; display:flex; flex-direction:column; gap:.5rem;">
-        <label for="id_avatar" class="btn btn-secondary" style="justify-content:center;">Upload new picture</label>
-        <label style="display:flex; align-items:center; gap:.4rem; justify-content:center; font-size:.9rem;">
-          {{ avatar_form.remove_avatar }} <span>Remove current avatar</span>
+      <div style="margin-top:.8rem; text-align:center;">
+        <label style="display:inline-flex; align-items:center; gap:.4rem; font-size:.85rem; color:var(--text-muted);">
+          {{ avatar_form.remove_avatar }} <span>Remove avatar</span>
         </label>
       </div>
     </div>

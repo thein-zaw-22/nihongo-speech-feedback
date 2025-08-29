@@ -104,17 +104,11 @@
     .dropdown a, .dropdown button { width:100%; text-align:left; padding:.5rem .65rem; border-radius:8px; border:none; background: transparent; color: var(--text-primary); font-size:.9rem; cursor:pointer; display:flex; align-items:center; height:32px; line-height:1; text-decoration:none; }
     .dropdown a:hover, .dropdown button:hover { background: rgba(102,126,234,.10); }
     .profile-wrap:hover .dropdown, .profile-wrap:focus-within .dropdown { opacity: 1; transform: translateY(0); pointer-events: auto; }
-    .theme-wrap { position: relative; display:flex; align-items:center; }
-    .theme-trigger { display:inline-flex; align-items:center; gap:.35rem; height:32px; padding:.2rem .5rem; border-radius:8px; border:1px solid rgba(102,126,234,.25); background: rgba(102,126,234,.10); cursor:pointer; transition: background .18s ease, box-shadow .18s ease; }
-    .theme-trigger:hover { background: rgba(102,126,234,.16); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-    .theme-text { font-size:.8rem; font-weight:600; color: var(--text-primary); }
-    .theme-wrap:hover .caret { transform: rotate(180deg); }
-    .theme-dropdown { position:absolute; top: 100%; right:0; margin-top: 6px; background: var(--bg-primary); border:1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-lg); min-width: 120px; padding:.4rem; z-index: 2000; opacity: 0; transform: translateY(-4px); transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
-    .theme-dropdown::before { content: ""; position: absolute; top: -8px; left: 0; right: 0; height: 8px; }
-    .theme-dropdown button { width:100%; text-align:left; padding:.5rem .65rem; border-radius:8px; border:none; background: transparent; color: var(--text-primary); font-size:.9rem; cursor:pointer; display:flex; align-items:center; height:32px; line-height:1; font-weight: 500; }
-    .theme-dropdown button { color: #1a202c !important; font-weight: 600 !important; }
-    .theme-dropdown button:hover { background: rgba(102,126,234,.10); }
-    .theme-wrap:hover .theme-dropdown, .theme-wrap:focus-within .theme-dropdown { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .theme-toggle { background: transparent; border:none; cursor:pointer; padding: 6px; border-radius: 6px; transition: background-color 0.2s ease; }
+    .theme-toggle:hover { background: rgba(0,0,0,0.05); }
+    .theme-toggle img { display: block; }
+    [data-theme="dark"] .theme-toggle:hover { background: rgba(255,255,255,0.1); }
+    [data-theme="dark"] .theme-toggle img { filter: invert(1); }
     /* Desktop and Mobile */
     .nav-burger { display: inline-flex; }
     @media (max-width: 900px) {
@@ -152,26 +146,53 @@
   </div>
 
   <script>
-    // Theme toggle with dropdown
+    // Theme toggle like Django admin
     const root = document.documentElement;
     (function(){
-      const themeText = document.querySelector('.theme-text');
-      const themeButtons = document.querySelectorAll('.theme-dropdown button');
+      const themeToggle = document.getElementById('themeToggle');
+      const themeIcon = document.getElementById('themeIcon');
       const saved = localStorage.getItem('theme') || 'system';
-      if (saved !== 'system') root.setAttribute('data-theme', saved);
-      function updateText(theme) {
-        const names = {system: 'Auto', light: 'Light', dark: 'Dark'};
-        if (themeText) themeText.textContent = names[theme] || 'Auto';
+      
+      function applyTheme(theme) {
+        if (theme === 'system') {
+          const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          root.setAttribute('data-theme', systemDark ? 'dark' : 'light');
+        } else {
+          root.setAttribute('data-theme', theme);
+        }
       }
-      updateText(saved);
-      themeButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          const val = btn.dataset.theme;
-          if (val === 'system') { root.removeAttribute('data-theme'); localStorage.removeItem('theme'); }
-          else { root.setAttribute('data-theme', val); localStorage.setItem('theme', val); }
-          updateText(val);
-        });
+      
+      function updateIcon(theme) {
+        const icons = {
+          system: '/static/core/auto-icon.svg',
+          light: '/static/core/sun-icon.svg',
+          dark: '/static/core/moon-icon.svg'
+        };
+        if (themeIcon) themeIcon.src = icons[theme] || icons.system;
+      }
+      
+      applyTheme(saved);
+      updateIcon(saved);
+      
+      // Listen for system theme changes
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        const currentTheme = localStorage.getItem('theme') || 'system';
+        if (currentTheme === 'system') applyTheme('system');
       });
+      
+      if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+          const themes = ['system', 'light', 'dark'];
+          const current = localStorage.getItem('theme') || 'system';
+          const next = themes[(themes.indexOf(current) + 1) % themes.length];
+          
+          if (next === 'system') localStorage.removeItem('theme');
+          else localStorage.setItem('theme', next);
+          
+          applyTheme(next);
+          updateIcon(next);
+        });
+      }
     })();
 
     // Sidebar toggle + persist

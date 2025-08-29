@@ -36,17 +36,9 @@
         <a class="btn btn-primary" href="{% url 'login' %}">Sign in</a>
         <a class="btn btn-secondary" href="{% url 'signup' %}">Sign up</a>
       {% endif %}
-      <div class="theme-wrap">
-        <div class="theme-trigger" aria-haspopup="true" aria-expanded="false" tabindex="0">
-          <span class="theme-text">Auto</span>
-          <span class="caret">▾</span>
-        </div>
-        <div class="theme-dropdown" role="menu">
-          <button type="button" data-theme="system">Auto</button>
-          <button type="button" data-theme="light">Light</button>
-          <button type="button" data-theme="dark">Dark</button>
-        </div>
-      </div>
+      <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
+        <img id="themeIcon" src="{% static 'core/auto-icon.svg' %}" alt="Theme" width="20" height="20">
+      </button>
     </div>
   </div>
 </nav>
