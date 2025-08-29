@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 class Transcription(models.Model):
     user = models.ForeignKey(
@@ -72,3 +73,30 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"Profile({self.user})"
+
+
+class BatchJob(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('done', 'Done'),
+        ('error', 'Error'),
+        ('canceled', 'Canceled'),
+    ]
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='batch_jobs')
+    provider = models.CharField(max_length=20, default='gemini')
+    input_file = models.FileField(upload_to='batch/')
+    output_file = models.FileField(upload_to='batch_out/', blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    total_rows = models.PositiveIntegerField(default=0)
+    processed_rows = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    cancel_requested = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def progress_percent(self):
+        if self.total_rows:
+            return int((self.processed_rows / max(1, self.total_rows)) * 100)
+        return 0

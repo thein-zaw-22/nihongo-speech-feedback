@@ -5,9 +5,9 @@
   .panel { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; margin-bottom: .75rem; }
   .controls { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
   .select, .input { padding:.5rem .6rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); }
-  .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.6rem .9rem; border:none; border-radius:10px; font-weight:700; cursor:pointer; text-decoration:none; }
-  .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; }
-  .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
+  .grammar-page .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.6rem .9rem; border:none; border-radius:10px; font-weight:700; cursor:pointer; text-decoration:none; }
+  .grammar-page .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; }
+  .grammar-page .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
   .pill { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:9999px; background: rgba(102,126,234,.12); color: var(--brand); border:1px solid rgba(102,126,234,.25); font-size:.75rem; font-weight:600; }
   .question { font-size:1.05rem; margin:.5rem 0; }
   .choices { display:grid; gap:.5rem; }
@@ -25,6 +25,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
+<div class="grammar-page">
 <h1>🎮 Grammar Game</h1>
 
 <div class="panel">

@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.utils.html import format_html
 import csv, io, json
 
-from .models import GrammarQuestion, GrammarChoice, GrammarGameSession, Transcription, Profile
+from .models import GrammarQuestion, GrammarChoice, GrammarGameSession, Transcription, Profile, BatchJob
 
 
 class ChoiceInline(admin.TabularInline):
@@ -111,3 +111,10 @@ class TranscriptionAdmin(admin.ModelAdmin):
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "updated_at")
+
+
+@admin.register(BatchJob)
+class BatchJobAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "provider", "status", "processed_rows", "total_rows", "created_at")
+    list_filter = ("status", "provider")
+    search_fields = ("user__username",)

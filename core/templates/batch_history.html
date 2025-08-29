@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}Batch History{% endblock %}
+{% block content %}
+<h1 style="font-size:1.25rem; margin-bottom:1rem;">Batch Jobs</h1>
+<div style="overflow:auto;">
+  <table style="width:100%; border-collapse: collapse;">
+    <thead>
+      <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
+        <th style="padding:.5rem;">ID</th>
+        <th style="padding:.5rem;">File</th>
+        <th style="padding:.5rem;">Provider</th>
+        <th style="padding:.5rem;">Status</th>
+        <th style="padding:.5rem;">Progress</th>
+        <th style="padding:.5rem;">Created</th>
+        <th style="padding:.5rem;">Updated</th>
+        <th style="padding:.5rem;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for j in jobs %}
+      <tr style="border-bottom:1px solid var(--border-color);">
+        <td style="padding:.5rem;">{{ j.id }}</td>
+        <td style="padding:.5rem;">{{ j.input_file.name|cut:"batch/" }}</td>
+        <td style="padding:.5rem;">{{ j.provider }}</td>
+        <td style="padding:.5rem;">{{ j.status|title }}</td>
+        <td style="padding:.5rem;">{{ j.processed_rows }}/{{ j.total_rows }} ({{ j.progress_percent }}%)</td>
+        <td style="padding:.5rem;">{{ j.created_at|date:"Y-m-d H:i" }}</td>
+        <td style="padding:.5rem;">{{ j.updated_at|date:"Y-m-d H:i" }}</td>
+        <td style="padding:.5rem; display:flex; gap:.4rem;">
+          {% if j.status == 'done' and j.output_file %}
+            <a class="btn btn-secondary" href="{% url 'batch_download' j.id %}">Download</a>
+          {% endif %}
+          {% if j.status == 'pending' or j.status == 'running' %}
+            <form action="{% url 'batch_cancel' j.id %}" method="post" onsubmit="return confirm('Cancel this job?');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit">Cancel</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" style="padding:1rem; color: var(--text-muted);">No jobs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top:1rem;">
+  <a class="btn btn-secondary" href="{% url 'index' %}">Back to Speak-AI</a>
+  <a class="btn btn-secondary" href="{% url 'batch_history' %}">Refresh</a>
+  
+</div>
+{% endblock %}
+

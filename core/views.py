@@ -7,17 +7,25 @@ from openai import OpenAI
 import google.generativeai as genai
 import logging
 from logging import Formatter
+import time
+from collections import deque
 from django.shortcuts import render, redirect
 from django.utils import timezone
-from datetime import datetime, time
+from datetime import datetime as dt_datetime, time as dt_time
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login as auth_login
 from django.contrib import messages as dj_messages
 from .forms import AudioUploadForm, ProfileForm, ProfileAvatarForm, PasswordUpdateForm
+from django.http import HttpResponse, JsonResponse, Http404
+from django.core.files.base import ContentFile
+import threading
+import io
+import csv
 from .models import Transcription
 from .models import GrammarQuestion, GrammarChoice, GrammarGameSession
+from .models import BatchJob
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -33,6 +41,76 @@ GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.5-flash-lite")
 # Configure Gemini once
 if os.getenv('GEMINI_API_KEY'):
     genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+
+# ---------------- Rate limiting & retry (batch) ----------------
+# Simple sliding window limiter per provider, configurable via env vars
+class _RateLimiter:
+    def __init__(self, max_calls: int, per_seconds: float):
+        self.max_calls = max_calls
+        self.per_seconds = per_seconds
+        self._hits = deque()
+
+    def wait(self):
+        now = time.monotonic()
+        # drop old
+        while self._hits and (now - self._hits[0]) > self.per_seconds:
+            self._hits.popleft()
+        if len(self._hits) >= self.max_calls:
+            sleep_for = self.per_seconds - (now - self._hits[0]) + 0.005
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+        # record
+        self._hits.append(time.monotonic())
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+def _env_float(name, default):
+    try:
+        return float(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+_limiters = {
+    'openai': _RateLimiter(
+        max_calls=_env_int('OPENAI_MAX_CALLS', 2),
+        per_seconds=_env_float('OPENAI_PER_SECONDS', 1.0)
+    ),
+    'gemini': _RateLimiter(
+        max_calls=_env_int('GEMINI_MAX_CALLS', 1),
+        per_seconds=_env_float('GEMINI_PER_SECONDS', 2.0)
+    ),
+    'bedrock': _RateLimiter(
+        max_calls=_env_int('BEDROCK_MAX_CALLS', 2),
+        per_seconds=_env_float('BEDROCK_PER_SECONDS', 1.0)
+    ),
+}
+
+def _call_llm_with_limits(text: str, provider: str):
+    provider = (provider or LLM_PROVIDER).lower()
+    limiter = _limiters.get(provider)
+    if limiter:
+        limiter.wait()
+    # basic retry with backoff for transient 429/throughput issues
+    attempts = _env_int('LLM_MAX_RETRIES', 3)
+    base_delay = _env_float('LLM_RETRY_BASE_DELAY', 1.5)
+    for i in range(attempts):
+        try:
+            return get_llm_feedback(text, provider)
+        except Exception as e:
+            msg = str(e).lower()
+            transient = any(term in msg for term in [
+                '429', 'rate limit', 'quota', 'throttle', 'throughput', 'too many requests', 'provisioned'
+            ])
+            if i < attempts - 1 and transient:
+                sleep_for = base_delay * (2 ** i)
+                time.sleep(sleep_for)
+                continue
+            raise
+# ----------------------------------------------------------------
 
 def get_client(provider):
     """Get client for the specified provider."""
@@ -320,7 +398,7 @@ def index(request):
             selected_provider = request.GET.get('provider') or request.session.get('llm_provider', 'gemini')
             form = AudioUploadForm(initial={'llm_provider': selected_provider})
 
-        return render(request, 'index.html', {'form': form})
+        return render(request, 'index.html', {'form': form, 'selected_provider': selected_provider})
 
     finally:
         logger.removeHandler(handler)
@@ -352,14 +430,14 @@ def history(request):
     # Parse YYYY-MM-DD safely
     try:
         if start_str:
-            d = datetime.strptime(start_str, '%Y-%m-%d').date()
-            start_dt = timezone.make_aware(datetime.combine(d, time.min), tz)
+            d = dt_datetime.strptime(start_str, '%Y-%m-%d').date()
+            start_dt = timezone.make_aware(dt_datetime.combine(d, dt_time.min), tz)
     except Exception:
         start_str = None
     try:
         if end_str:
-            d = datetime.strptime(end_str, '%Y-%m-%d').date()
-            end_dt = timezone.make_aware(datetime.combine(d, time.max), tz)
+            d = dt_datetime.strptime(end_str, '%Y-%m-%d').date()
+            end_dt = timezone.make_aware(dt_datetime.combine(d, dt_time.max), tz)
     except Exception:
         end_str = None
     # Validate range first: end must not be earlier than start
@@ -544,6 +622,222 @@ def signup(request):
     return render(request, 'registration/signup.html', {'form': form})
 
 
+# ---------------- Batch processing (queued with background thread) ----------------
+def _process_batch_job(job_id: int):
+    try:
+        job = BatchJob.objects.get(pk=job_id)
+    except BatchJob.DoesNotExist:
+        return
+    job.status = 'running'
+    job.processed_rows = 0
+    job.save(update_fields=['status', 'processed_rows', 'updated_at'])
+
+    name = (job.input_file.name or '').lower()
+    provider = job.provider
+    try:
+        if name.endswith('.csv'):
+            with job.input_file.open('rb') as f:
+                data = f.read().decode('utf-8', errors='replace')
+            rows = list(csv.reader(io.StringIO(data)))
+            job.total_rows = len(rows)
+            job.save(update_fields=['total_rows', 'updated_at'])
+            out = io.StringIO()
+            writer = csv.writer(out)
+            for i, row in enumerate(rows):
+                # Check cancel
+                job.refresh_from_db(fields=['cancel_requested'])
+                if job.cancel_requested:
+                    job.status = 'canceled'
+                    job.save(update_fields=['status', 'updated_at'])
+                    return
+                if len(row) < 9:
+                    row = row + [''] * (9 - len(row))
+                text = (row[5] or '').strip()
+                # Always treat first row as header and set output headers
+                if i == 0:
+                    row[6] = 'CorrectedText'
+                    row[7] = 'Explanation'
+                    row[8] = 'Notes'
+                elif text:
+                    try:
+                        raw = _call_llm_with_limits(text, provider)
+                        try:
+                            parsed = json.loads(raw)
+                        except Exception:
+                            start = raw.find('{'); end = raw.rfind('}') + 1
+                            parsed = json.loads(raw[start:end]) if start >= 0 and end > start else {"corrected_text": text, "corrections": []}
+                        row[6] = parsed.get('corrected_text') or ''
+                        row[7] = json.dumps(parsed, ensure_ascii=False)
+                        # If the model signaled an error in payload, surface it in Notes (I)
+                        note = ''
+                        if isinstance(parsed, dict) and parsed.get('error'):
+                            note = str(parsed.get('error'))
+                        row[8] = note
+                    except Exception as e:
+                        row[6] = text
+                        err_text = str(e)
+                        row[7] = json.dumps({"error": err_text, "raw": raw if 'raw' in locals() else ''}, ensure_ascii=False)
+                        row[8] = err_text
+                writer.writerow(row)
+                job.processed_rows = i + 1
+                job.save(update_fields=['processed_rows', 'updated_at'])
+            content = out.getvalue().encode('utf-8')
+            job.output_file.save(os.path.basename(job.input_file.name).rsplit('.', 1)[0] + '_corrected.csv', ContentFile(content), save=False)
+        else:
+            from openpyxl import load_workbook
+            with job.input_file.open('rb') as f:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(job.input_file.name)[1]) as tmp:
+                    tmp.write(f.read())
+                    tmp_path = tmp.name
+            try:
+                wb = load_workbook(tmp_path)
+                ws = wb.active
+                max_row = ws.max_row
+                job.total_rows = max_row
+                job.save(update_fields=['total_rows', 'updated_at'])
+                for r in range(1, max_row + 1):
+                    # Check cancel
+                    job.refresh_from_db(fields=['cancel_requested'])
+                    if job.cancel_requested:
+                        job.status = 'canceled'
+                        job.save(update_fields=['status', 'updated_at'])
+                        return
+                    val = ws.cell(row=r, column=6).value
+                    text = (val or '') if val is not None else ''
+                    header = (r == 1)
+                    if header:
+                        ws.cell(row=r, column=7, value='CorrectedText')
+                        ws.cell(row=r, column=8, value='Explanation')
+                        ws.cell(row=r, column=9, value='Notes')
+                    else:
+                        text = str(text).strip()
+                        if text:
+                            try:
+                                raw = _call_llm_with_limits(text, provider)
+                                try:
+                                    parsed = json.loads(raw)
+                                except Exception:
+                                    start = raw.find('{'); end = raw.rfind('}') + 1
+                                    parsed = json.loads(raw[start:end]) if start >= 0 and end > start else {"corrected_text": text, "corrections": []}
+                                ws.cell(row=r, column=7, value=parsed.get('corrected_text') or '')
+                                ws.cell(row=r, column=8, value=json.dumps(parsed, ensure_ascii=False))
+                                if isinstance(parsed, dict) and parsed.get('error'):
+                                    ws.cell(row=r, column=9, value=str(parsed.get('error')))
+                            except Exception as e:
+                                ws.cell(row=r, column=7, value=text)
+                                err_text = str(e)
+                                ws.cell(row=r, column=8, value=json.dumps({"error": err_text, "raw": raw if 'raw' in locals() else ''}, ensure_ascii=False))
+                                ws.cell(row=r, column=9, value=err_text)
+                    job.processed_rows = r
+                    job.save(update_fields=['processed_rows', 'updated_at'])
+                bio = io.BytesIO()
+                wb.save(bio)
+                bio.seek(0)
+                job.output_file.save(os.path.basename(job.input_file.name).rsplit('.', 1)[0] + '_corrected.xlsx', ContentFile(bio.read()), save=False)
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+        job.status = 'done'
+        job.save()
+    except Exception as e:
+        job.status = 'error'
+        job.error_message = str(e)
+        job.save(update_fields=['status', 'error_message', 'updated_at'])
+
+
+@login_required
+def batch_create(request):
+    if request.method != 'POST':
+        raise Http404
+    upload = request.FILES.get('batch_file')
+    provider = request.POST.get('provider') or request.session.get('llm_provider') or LLM_PROVIDER
+    if not upload:
+        # If normal form post, bounce back with message
+        if 'application/json' in (request.headers.get('Accept') or '') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'ok': False, 'error': 'No file uploaded'}, status=400)
+        messages.error(request, 'Please upload a CSV or Excel file.')
+        return redirect('index')
+    job = BatchJob.objects.create(user=request.user, provider=provider, input_file=upload, status='pending')
+    threading.Thread(target=_process_batch_job, args=(job.id,), daemon=True).start()
+    # Return JSON for AJAX; redirect for normal form submission
+    if 'application/json' in (request.headers.get('Accept') or '') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'job_id': job.id})
+    from django.urls import reverse
+    try:
+        messages.success(request, f'Batch job #{job.id} started.')
+    except Exception:
+        pass
+    return redirect(f"{reverse('index')}?job_id={job.id}")
+
+
+@login_required
+def batch_status(request, pk: int):
+    try:
+        job = BatchJob.objects.get(pk=pk, user=request.user)
+    except BatchJob.DoesNotExist:
+        raise Http404
+    return JsonResponse({
+        'ok': True,
+        'status': job.status,
+        'processed': job.processed_rows,
+        'total': job.total_rows,
+        'percent': job.progress_percent,
+        'error': job.error_message,
+        'cancelable': job.status in ('pending','running') and not job.cancel_requested,
+        'download_url': (None if job.status != 'done' else f"/speak-ai/batch/{job.id}/download"),
+    })
+
+
+@login_required
+def batch_download(request, pk: int):
+    try:
+        job = BatchJob.objects.get(pk=pk, user=request.user)
+    except BatchJob.DoesNotExist:
+        raise Http404
+    if job.status != 'done' or not job.output_file:
+        raise Http404
+    ext = os.path.splitext(job.output_file.name)[1].lower()
+    if ext == '.csv':
+        ctype = 'text/csv; charset=utf-8'
+    else:
+        ctype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    with job.output_file.open('rb') as fh:
+        data = fh.read()
+    resp = HttpResponse(data, content_type=ctype)
+    resp['Content-Disposition'] = f'attachment; filename="{os.path.basename(job.output_file.name)}"'
+    return resp
+
+
+@login_required
+def batch_cancel(request, pk: int):
+    if request.method != 'POST':
+        raise Http404
+    try:
+        job = BatchJob.objects.get(pk=pk, user=request.user)
+    except BatchJob.DoesNotExist:
+        raise Http404
+    if job.status in ('pending','running') and not job.cancel_requested:
+        job.cancel_requested = True
+        job.save(update_fields=['cancel_requested', 'updated_at'])
+    # Return JSON for AJAX; redirect back to history for normal form posts
+    if 'application/json' in (request.headers.get('Accept') or '') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True})
+    from django.urls import reverse
+    try:
+        messages.success(request, f'Cancel requested for job #{job.id}.')
+    except Exception:
+        pass
+    return redirect(reverse('batch_history'))
+
+
+@login_required
+def batch_history(request):
+    jobs = BatchJob.objects.filter(user=request.user).order_by('-created_at')[:50]
+    return render(request, 'batch_history.html', {'jobs': jobs})
+
+
 @login_required
 def profile(request):
     # Ensure profile exists
@@ -592,3 +886,109 @@ def password_update(request):
     else:
         form = PasswordUpdateForm(request.user)
     return render(request, 'registration/password_update.html', {'form': form})
+
+
+@login_required
+def batch_correct(request):
+    """Upload CSV/XLSX, process column F via LLM, write G/H, return file."""
+    if request.method != 'POST':
+        return redirect('index')
+
+    upload = request.FILES.get('batch_file')
+    provider = request.POST.get('provider') or request.session.get('llm_provider') or LLM_PROVIDER
+    if not upload:
+        messages.error(request, 'Please upload a CSV or Excel file.')
+        return redirect('index')
+
+    name = (upload.name or '').lower()
+    try:
+        if name.endswith('.csv'):
+            data = upload.read().decode('utf-8', errors='replace')
+            src = io.StringIO(data)
+            reader = csv.reader(src)
+            out = io.StringIO()
+            writer = csv.writer(out)
+            for i, row in enumerate(reader):
+                # Ensure at least 8 columns
+                if len(row) < 8:
+                    row = row + [''] * (8 - len(row))
+                text = (row[5] or '').strip()
+                # Header detection
+                is_header = (i == 0 and text.lower() == 'incorrecttext')
+                if not is_header and text:
+                    try:
+                        raw = get_llm_feedback(text, provider)
+                        try:
+                            parsed = json.loads(raw)
+                        except Exception:
+                            start = raw.find('{'); end = raw.rfind('}') + 1
+                            parsed = json.loads(raw[start:end]) if start >= 0 and end > start else {"corrected_text": text, "corrections": []}
+                        corrected = parsed.get('corrected_text') or ''
+                        row[6] = corrected
+                        row[7] = json.dumps(parsed, ensure_ascii=False)
+                    except Exception as e:
+                        row[6] = text
+                        row[7] = json.dumps({"error": str(e), "raw": raw if 'raw' in locals() else ''}, ensure_ascii=False)
+                else:
+                    # Keep/ensure headers for outputs if header row
+                    if is_header:
+                        row[6] = 'CorrectedText'
+                        row[7] = 'Explanation'
+                writer.writerow(row)
+            content = out.getvalue().encode('utf-8')
+            resp = HttpResponse(content, content_type='text/csv; charset=utf-8')
+            base = name.rsplit('.', 1)[0]
+            resp['Content-Disposition'] = f'attachment; filename="{base}_corrected.csv"'
+            return resp
+        else:
+            from openpyxl import load_workbook
+            # Save to temp and load via openpyxl
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(upload.name)[1]) as tmp:
+                for chunk in upload.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
+            try:
+                wb = load_workbook(tmp_path)
+                ws = wb.active
+                max_row = ws.max_row
+                for r in range(1, max_row + 1):
+                    cell = ws.cell(row=r, column=6)  # F
+                    text = (cell.value or '') if cell.value is not None else ''
+                    header = isinstance(text, str) and text.strip().lower() == 'incorrecttext'
+                    if r == 1 and header:
+                        ws.cell(row=r, column=7, value='CorrectedText')
+                        ws.cell(row=r, column=8, value='Explanation')
+                        continue
+                    text = str(text).strip()
+                    if not text:
+                        continue
+                    try:
+                        raw = get_llm_feedback(text, provider)
+                        try:
+                            parsed = json.loads(raw)
+                        except Exception:
+                            start = raw.find('{'); end = raw.rfind('}') + 1
+                            parsed = json.loads(raw[start:end]) if start >= 0 and end > start else {"corrected_text": text, "corrections": []}
+                        corrected = parsed.get('corrected_text') or ''
+                        ws.cell(row=r, column=7, value=corrected)
+                        ws.cell(row=r, column=8, value=json.dumps(parsed, ensure_ascii=False))
+                    except Exception as e:
+                        ws.cell(row=r, column=7, value=text)
+                        ws.cell(row=r, column=8, value=json.dumps({"error": str(e), "raw": raw if 'raw' in locals() else ''}, ensure_ascii=False))
+
+                # Write to bytes
+                bio = io.BytesIO()
+                wb.save(bio)
+                bio.seek(0)
+                resp = HttpResponse(bio.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                base = os.path.splitext(upload.name)[0]
+                resp['Content-Disposition'] = f'attachment; filename="{base}_corrected.xlsx"'
+                return resp
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+    except Exception as e:
+        messages.error(request, f'Batch processing failed: {e}')
+        return redirect('index')
