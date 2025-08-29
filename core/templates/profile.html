@@ -4,12 +4,12 @@
 {% block content %}
 <style>
   /* Inline preview panel within the container */
-  .avatar-inline-preview { display: none; margin-top: 1rem; padding: .75rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-sm); }
-  .avatar-inline-preview.open { display: block; }
-  .avatar-inline-preview .head { display:flex; align-items:center; justify-content: space-between; margin-bottom: .5rem; }
-  .avatar-inline-preview .head .title { font-weight: 700; color: var(--text-secondary); }
-  .avatar-inline-preview .close { appearance: none; border: none; background: rgba(102,126,234,.1); color: var(--brand); border:1px solid rgba(102,126,234,.25); padding: .3rem .6rem; border-radius: 8px; cursor: pointer; }
-  .avatar-inline-preview img { display:block; max-width: 100%; height: auto; max-height: 360px; border-radius: 8px; margin: 0 auto; object-fit: contain; }
+  .avatar-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 2rem; }
+  .avatar-modal.open { display: flex; }
+  .avatar-modal-content { position: relative; max-width: 400px; max-height: 400px; background: var(--bg-primary); border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+  .avatar-modal img { display: block; width: 100%; height: auto; max-height: 400px; object-fit: contain; }
+  .avatar-modal-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 50%; background: rgba(0,0,0,0.6); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 300; }
+  .avatar-modal-close:hover { background: rgba(0,0,0,0.8); }
   .avatar-edit-btn:hover { background: var(--bg-secondary); transform: scale(1.05); transition: all 0.2s ease; }
   [data-theme="dark"] .avatar-edit-btn img { filter: invert(1); }
 </style>
@@ -83,13 +83,11 @@
     <a class="btn btn-secondary" href="{% url 'password_update' %}">Change Password</a>
   </div>
 </form>
-<div id="avatarInlinePreview" class="avatar-inline-preview" aria-hidden="true">
-  <div class="head">
-    <div class="title">Profile picture preview</div>
-    <button type="button" class="close" id="avatarPreviewClose">Close</button>
+<div id="avatarModal" class="avatar-modal" aria-hidden="true">
+  <div class="avatar-modal-content">
+    <button type="button" class="avatar-modal-close" id="avatarPreviewClose">×</button>
+    <img id="avatarFull" src="" alt="Profile picture">
   </div>
-  <img id="avatarFull" src="" alt="Profile picture">
-  <div style="text-align:center; color: var(--text-muted); font-size:.9rem; margin-top:.4rem;">This is a preview. Click Save Changes to keep it.</div>
 </div>
 <script>
   (function(){
@@ -97,7 +95,7 @@
     const preview = document.getElementById('avatarPreview');
     const initial = document.getElementById('avatarInitial');
     const clickTarget = document.getElementById('avatarClickTarget');
-    const panel = document.getElementById('avatarInlinePreview');
+    const panel = document.getElementById('avatarModal');
     const full = document.getElementById('avatarFull');
     let currentUrl = preview && preview.src ? preview.src : '';
     if (!fileInput) return;
@@ -136,10 +134,12 @@
       full.src = src;
       panel.classList.add('open');
       panel.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
     }
     function closePanel(){
       panel.classList.remove('open');
       panel.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
     }
     if (clickTarget){
       clickTarget.addEventListener('click', openPanel);
@@ -147,6 +147,10 @@
     }
     const closeBtn = document.getElementById('avatarPreviewClose');
     if (closeBtn){ closeBtn.addEventListener('click', closePanel); }
+    // Close on backdrop click
+    if (panel){ panel.addEventListener('click', function(e){ if (e.target === panel) closePanel(); }); }
+    // Close on Escape key
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && panel.classList.contains('open')) closePanel(); });
   })();
   </script>
 {% endblock %}
