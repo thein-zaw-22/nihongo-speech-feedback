@@ -122,6 +122,29 @@
     .toast.success { background: linear-gradient(135deg, #10b981, #059669); }
     .toast.error { background: linear-gradient(135deg, #ef4444, #b91c1c); }
     .toast.warn { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+    /* Accessibility: Forced Colors Mode (replaces legacy -ms-high-contrast) */
+    @media (forced-colors: active) {
+      :root {
+        --bg-primary: Canvas;
+        --bg-secondary: Canvas;
+        --text-primary: CanvasText;
+        --text-secondary: CanvasText;
+        --text-muted: GrayText;
+        --border-color: GrayText;
+      }
+      .topnav, .container, .sidebar, .dropdown, .sidebar-link, .btn, .theme-select {
+        border-color: ButtonText !important;
+      }
+      .btn-primary, .btn-secondary, .btn-danger {
+        background: ButtonFace !important;
+        color: ButtonText !important;
+      }
+      .sidebar-link:hover, .sidebar-link.active { background: Highlight !important; color: HighlightText !important; }
+      .theme-select { background: ButtonFace !important; color: ButtonText !important; }
+      a { color: LinkText; }
+      :focus, :focus-visible { outline: 1px solid Highlight !important; outline-offset: 2px; box-shadow: none !important; }
+    }
   </style>
 </head>
 <body>
