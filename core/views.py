@@ -306,6 +306,13 @@ def index(request):
                 logger.debug("Saved Transcription id=%s", record.id)
 
                 # Redirect to feedback page, carrying provider for display
+                try:
+                    # Persist a trimmed set of recent logs for display on feedback page
+                    trimmed = logs[-100:]
+                    request.session['last_logs'] = trimmed
+                except Exception:
+                    # Session may be unavailable or oversized; ignore quietly
+                    pass
                 return redirect(f"/feedback/{record.id}/?provider={selected_provider}")
         else:
             # Get provider from URL parameter if available
@@ -325,7 +332,13 @@ def feedback(request, pk):
     except Transcription.DoesNotExist:
         return redirect('index')
     selected_provider = request.GET.get('provider') or (obj.feedback.get('provider') if isinstance(obj.feedback, dict) else None)
-    return render(request, 'result.html', {'result': obj, 'selected_provider': selected_provider})
+    # Retrieve any carried-over debug logs from session (then clear)
+    logs = None
+    try:
+        logs = request.session.pop('last_logs', None)
+    except Exception:
+        logs = None
+    return render(request, 'result.html', {'result': obj, 'selected_provider': selected_provider, 'logs': logs})
 
 
 @login_required
