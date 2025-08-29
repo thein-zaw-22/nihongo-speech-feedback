@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% block title %}Profile · AI Japanese Feedback{% endblock %}
+{% block content %}
+<style>
+  /* Inline preview panel within the container */
+  .avatar-inline-preview { display: none; margin-top: 1rem; padding: .75rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-sm); }
+  .avatar-inline-preview.open { display: block; }
+  .avatar-inline-preview .head { display:flex; align-items:center; justify-content: space-between; margin-bottom: .5rem; }
+  .avatar-inline-preview .head .title { font-weight: 700; color: var(--text-secondary); }
+  .avatar-inline-preview .close { appearance: none; border: none; background: rgba(102,126,234,.1); color: var(--brand); border:1px solid rgba(102,126,234,.25); padding: .3rem .6rem; border-radius: 8px; cursor: pointer; }
+  .avatar-inline-preview img { display:block; max-width: 100%; height: auto; max-height: 360px; border-radius: 8px; margin: 0 auto; object-fit: contain; }
+</style>
+
+<h1 style="font-size:1.25rem; margin-bottom:1rem;">Profile</h1>
+
+<form method="post" enctype="multipart/form-data" novalidate style="display:grid; gap:1rem; max-width:720px;">
+  {% csrf_token %}
+
+  <div style="display:flex; gap:1.25rem; align-items:flex-start;">
+    <div style="min-width:120px; text-align:center;">
+      <div id="avatarClickTarget" style="width:96px;height:96px;border-radius:50%;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.12);background:linear-gradient(135deg, var(--brand), var(--brand-2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.6rem;margin:0 auto; cursor: pointer;" title="Click to view full size" role="button" tabindex="0">
+        {% if profile.avatar %}
+          <img id="avatarPreview" src="{{ profile.avatar.url }}" alt="avatar" style="width:100%;height:100%;object-fit:cover;display:block;" />
+        {% else %}
+          <span id="avatarInitial">{{ user.username|slice:":1"|upper }}</span>
+          <img id="avatarPreview" src="" alt="avatar" style="width:100%;height:100%;object-fit:cover;display:none;" />
+        {% endif %}
+      </div>
+      <div style="margin-top:.6rem; display:flex; flex-direction:column; gap:.5rem;">
+        <label for="id_avatar" class="btn btn-secondary" style="justify-content:center;">Upload new picture</label>
+        <label style="display:flex; align-items:center; gap:.4rem; justify-content:center; font-size:.9rem;">
+          {{ avatar_form.remove_avatar }} <span>Remove current avatar</span>
+        </label>
+      </div>
+    </div>
+    <div style="flex:1; display:grid; gap:.75rem;">
+      {% if form.non_field_errors %}
+        <div style="padding:.6rem .8rem; border-radius:8px; background: rgba(239,68,68,.12); color:#b91c1c; border:1px solid rgba(239,68,68,.25);">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div>
+        <label style="display:block; font-weight:600; margin-bottom:.25rem;">Username</label>
+        {{ form.username }}
+        {{ form.username.errors }}
+      </div>
+      <div style="display:flex; gap:.75rem;">
+        <div style="flex:1;">
+          <label style="display:block; font-weight:600; margin-bottom:.25rem;">First name</label>
+          {{ form.first_name }}
+          {{ form.first_name.errors }}
+        </div>
+        <div style="flex:1;">
+          <label style="display:block; font-weight:600; margin-bottom:.25rem;">Last name</label>
+          {{ form.last_name }}
+          {{ form.last_name.errors }}
+        </div>
+      </div>
+      <div>
+        <label style="display:block; font-weight:600; margin-bottom:.25rem;">Email</label>
+        {{ form.email }}
+        {{ form.email.errors }}
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="id_avatar" name="avatar" accept="image/*" style="display:none;" />
+  {% if avatar_form.non_field_errors %}
+    <div style="color:#b91c1c;">{{ avatar_form.non_field_errors }}</div>
+  {% endif %}
+  {% for f in avatar_form %}
+    {% if f.errors %}<div style="color:#b91c1c;">{{ f.errors }}</div>{% endif %}
+  {% endfor %}
+
+  <div style="display:flex; gap:.5rem; align-items:center; margin-top:.25rem;">
+    <button class="btn btn-primary" type="submit">Save Changes</button>
+    <a class="btn btn-secondary" href="{% url 'password_update' %}">Change Password</a>
+  </div>
+</form>
+<div id="avatarInlinePreview" class="avatar-inline-preview" aria-hidden="true">
+  <div class="head">
+    <div class="title">Profile picture preview</div>
+    <button type="button" class="close" id="avatarPreviewClose">Close</button>
+  </div>
+  <img id="avatarFull" src="" alt="Profile picture">
+  <div style="text-align:center; color: var(--text-muted); font-size:.9rem; margin-top:.4rem;">This is a preview. Click Save Changes to keep it.</div>
+</div>
+<script>
+  (function(){
+    const fileInput = document.getElementById('id_avatar');
+    const preview = document.getElementById('avatarPreview');
+    const initial = document.getElementById('avatarInitial');
+    const clickTarget = document.getElementById('avatarClickTarget');
+    const panel = document.getElementById('avatarInlinePreview');
+    const full = document.getElementById('avatarFull');
+    let currentUrl = preview && preview.src ? preview.src : '';
+    if (!fileInput) return;
+    let lastUrl = null;
+    fileInput.addEventListener('change', function(){
+      const f = this.files && this.files[0];
+      if (!f) return;
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      const url = URL.createObjectURL(f);
+      lastUrl = url;
+      currentUrl = url;
+      if (initial) initial.style.display = 'none';
+      if (preview){ preview.src = url; preview.style.display = 'block'; }
+      // Also update navbar avatar if present
+      const navAvatar = document.querySelector('.profile-wrap .avatar');
+      if (navAvatar){
+        let navImg = navAvatar.querySelector('img');
+        if (!navImg){
+          navImg = document.createElement('img');
+          navImg.alt = 'avatar';
+          navImg.style.width = '100%';
+          navImg.style.height = '100%';
+          navImg.style.objectFit = 'cover';
+          // hide the initial text content
+          navAvatar.textContent = '';
+          navAvatar.appendChild(navImg);
+        }
+        navImg.src = url;
+        navImg.style.display = 'block';
+      }
+    });
+
+    function openPanel(){
+      var src = currentUrl || (preview && preview.src);
+      if (!src) return;
+      full.src = src;
+      panel.classList.add('open');
+      panel.setAttribute('aria-hidden', 'false');
+    }
+    function closePanel(){
+      panel.classList.remove('open');
+      panel.setAttribute('aria-hidden', 'true');
+    }
+    if (clickTarget){
+      clickTarget.addEventListener('click', openPanel);
+      clickTarget.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(); }});
+    }
+    const closeBtn = document.getElementById('avatarPreviewClose');
+    if (closeBtn){ closeBtn.addEventListener('click', closePanel); }
+  })();
+  </script>
+{% endblock %}

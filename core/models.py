@@ -63,3 +63,12 @@ class GrammarGameSession(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.jlpt_level}/{self.category} {self.correct}/{self.total_questions}"
+
+
+class Profile(models.Model):
+    user = models.OneToOneField(get_user_model(), on_delete=models.CASCADE, related_name='profile')
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Profile({self.user})"

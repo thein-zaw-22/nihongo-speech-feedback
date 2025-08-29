@@ -14,7 +14,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login as auth_login
-from .forms import AudioUploadForm
+from django.contrib import messages as dj_messages
+from .forms import AudioUploadForm, ProfileForm, ProfileAvatarForm, PasswordUpdateForm
 from .models import Transcription
 from .models import GrammarQuestion, GrammarChoice, GrammarGameSession
 
@@ -532,7 +533,62 @@ def signup(request):
         if form.is_valid():
             user = form.save()
             auth_login(request, user)
+            try:
+                from .models import Profile as UserProfile
+                UserProfile.objects.get_or_create(user=user)
+            except Exception:
+                pass
             return redirect('index')
     else:
         form = UserCreationForm()
     return render(request, 'registration/signup.html', {'form': form})
+
+
+@login_required
+def profile(request):
+    # Ensure profile exists
+    from .models import Profile as UserProfile
+    profile_obj, _ = UserProfile.objects.get_or_create(user=request.user)
+    if request.method == 'POST':
+        user_form = ProfileForm(request.POST, instance=request.user)
+        avatar_form = ProfileAvatarForm(request.POST, request.FILES, instance=profile_obj)
+        if user_form.is_valid() and avatar_form.is_valid():
+            user_form.save()
+            avatar_form.save()
+            try:
+                dj_messages.success(request, 'Profile updated successfully.')
+            except Exception:
+                pass
+            return redirect('profile')
+    else:
+        user_form = ProfileForm(instance=request.user)
+        avatar_form = ProfileAvatarForm(instance=profile_obj)
+    return render(request, 'profile.html', {'form': user_form, 'avatar_form': avatar_form, 'profile': profile_obj})
+
+
+@login_required
+def password_update(request):
+    from django.contrib.auth import update_session_auth_hash
+    if request.method == 'POST':
+        form = PasswordUpdateForm(request.user, request.POST)
+        if form.is_valid():
+            new_pwd = form.cleaned_data['new_password'].strip()
+            user = request.user
+            user.set_password(new_pwd)
+            user.save()
+            # Sanity check
+            if not user.check_password(new_pwd):
+                try:
+                    dj_messages.error(request, 'Password update failed. Please try again.')
+                except Exception:
+                    pass
+                return render(request, 'registration/password_update.html', {'form': form})
+            update_session_auth_hash(request, user)
+            try:
+                dj_messages.success(request, 'Password updated successfully.')
+            except Exception:
+                pass
+            return redirect('profile')
+    else:
+        form = PasswordUpdateForm(request.user)
+    return render(request, 'registration/password_update.html', {'form': form})

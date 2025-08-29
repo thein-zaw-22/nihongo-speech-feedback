@@ -32,11 +32,11 @@
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%); min-height: 100vh; color: var(--text-primary); transition: all 0.3s ease; }
-    .nav { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
+    .nav { position: sticky; top: 0; z-index: 1000; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
     .nav .row { max-width: 1200px; margin: 0 auto; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem; min-height: 50px; }
     .brand { font-weight: 700; font-size: 1rem; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .actions { margin-left: auto; display: flex; align-items: center; gap: 0.375rem; }
-    .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.35rem .6rem; border:none; border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer; text-decoration:none; transition: all .2s ease; }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.35rem .6rem; border:none; border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer; text-decoration:none; transition: all .2s ease; height: 32px; }
     .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; box-shadow: 0 2px 8px rgba(102,126,234,.3); }
     .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,.4); }
     .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
@@ -55,6 +55,19 @@
       line-height: 1;
     }
     .theme-select:hover { background: rgba(102,126,234,.2); cursor: pointer; }
+    .profile-wrap { position: relative; display:flex; align-items:center; }
+    .profile-trigger { display:flex; align-items:center; gap:.45rem; background: rgba(102,126,234,.10); color: var(--text-primary); border:1px solid rgba(102,126,234,.25); padding:.35rem .6rem; border-radius: 8px; cursor:pointer; transition: background .18s ease, box-shadow .18s ease; height: 32px; }
+    .profile-trigger:hover { background: rgba(102,126,234,.16); box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:.85rem; color:#fff; background: linear-gradient(135deg, var(--brand), var(--brand-2)); box-shadow: 0 2px 6px rgba(0,0,0,.15); overflow:hidden; }
+    .avatar img { width:100%; height:100%; object-fit: cover; display:block; }
+    .username { font-size:.85rem; font-weight:600; color: var(--text-primary); }
+    .caret { font-size:.8rem; color: var(--text-muted); transition: transform .18s ease; }
+    .profile-wrap:hover .caret { transform: rotate(180deg); }
+    .dropdown { position:absolute; top: 100%; right:0; margin-top: 6px; background: var(--bg-primary); border:1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-lg); min-width: 200px; padding:.4rem; z-index: 2000; opacity: 0; transform: translateY(-4px); transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
+    .dropdown::before { content: ""; position: absolute; top: -8px; left: 0; right: 0; height: 8px; }
+    .dropdown a, .dropdown button { width:100%; text-align:left; padding:.5rem .65rem; border-radius:8px; border:none; background: transparent; color: var(--text-primary); font-size:.9rem; cursor:pointer; display:block; text-decoration:none; }
+    .dropdown a:hover, .dropdown button:hover { background: rgba(102,126,234,.10); }
+    .profile-wrap:hover .dropdown, .profile-wrap:focus-within .dropdown { opacity: 1; transform: translateY(0); pointer-events: auto; }
   </style>
 </head>
 <body>
@@ -65,10 +78,27 @@
         {% if user.is_authenticated %}
           <a class="btn btn-secondary" href="/home/">Home</a>
           <a class="btn btn-secondary" href="/history/">History</a>
-          <form action="{% url 'logout' %}" method="post" style="display:inline; margin:0;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-danger" style="cursor:pointer;">Logout</button>
-          </form>
+          <div class="profile-wrap">
+            <div class="btn btn-secondary profile-trigger" aria-haspopup="true" aria-expanded="false" tabindex="0">
+              <span class="avatar">
+                {% if user.is_authenticated and user_avatar_url %}
+                  <img src="{{ user_avatar_url }}" alt="avatar" />
+                {% else %}
+                  {{ user.username|slice:":1"|upper }}
+                {% endif %}
+              </span>
+              <span class="username">{{ user.username }}</span>
+              <span class="caret">▾</span>
+            </div>
+            <div class="dropdown" role="menu">
+              <a href="{% url 'profile' %}">Profile</a>
+              <a href="{% url 'password_update' %}">Change Password</a>
+              <form action="{% url 'logout' %}" method="post" style="margin:0;">
+                {% csrf_token %}
+                <button type="submit">Logout</button>
+              </form>
+            </div>
+          </div>
         {% else %}
           {% with view_name=request.resolver_match.url_name %}
             {% if view_name != 'login' and view_name != 'signup' %}

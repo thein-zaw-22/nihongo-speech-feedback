@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.utils.html import format_html
 import csv, io, json
 
-from .models import GrammarQuestion, GrammarChoice, GrammarGameSession, Transcription
+from .models import GrammarQuestion, GrammarChoice, GrammarGameSession, Transcription, Profile
 
 
 class ChoiceInline(admin.TabularInline):
@@ -107,3 +107,7 @@ class TranscriptionAdmin(admin.ModelAdmin):
     list_display = ("user", "created_at")
     readonly_fields = ("feedback",)
 
+
+@admin.register(Profile)
+class ProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "updated_at")
