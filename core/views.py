@@ -895,6 +895,12 @@ def batch_history(request):
 
 
 @login_required
+def puzzle(request):
+    """Render the Japanese Syntax Puzzle page (client-side logic)."""
+    return render(request, 'puzzle.html')
+
+
+@login_required
 def profile(request):
     # Ensure profile exists
     from .models import Profile as UserProfile

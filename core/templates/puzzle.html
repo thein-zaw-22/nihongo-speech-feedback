@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Puzzle · AI Japanese Feedback{% endblock %}
+{% block content %}
+<style>
+  .puzzle-wrap { display:grid; gap:.9rem; }
+  .puzzle-header { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+  .puzzle-title { font-weight:800; color: var(--text-primary); font-size:1.05rem; }
+  .muted { color: var(--text-muted); }
+  .board { position:relative; display:grid; gap:.6rem; }
+  .bank, .answer { display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem; border:1px solid var(--border-color); border-radius:12px; background: var(--bg-secondary); min-height:54px; }
+  .answer { background: rgba(102,126,234,.05); }
+  .tile { display:inline-flex; align-items:center; justify-content:center; padding:.45rem .7rem; border:1px solid var(--border-color); border-radius:12px; background: var(--bg-primary); box-shadow: 0 1px 2px rgba(0,0,0,.06); cursor: grab; user-select:none; touch-action:none; min-height:44px; min-width:44px; font-weight:700; }
+  .tile.dragging { opacity:.6; }
+  .slot-hint { display:inline-block; width:8px; height:32px; background: rgba(102,126,234,.25); border-radius:4px; }
+  .controls { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+  .controls .btn { height:auto; padding:.45rem .8rem; }
+  .timer { font-variant-numeric: tabular-nums; }
+  .banner { border-radius:12px; padding:.6rem .8rem; font-weight:700; }
+  .banner.ok { background: rgba(16,185,129,.12); color:#047857; border:1px solid rgba(16,185,129,.25); }
+  .banner.err { background: rgba(239,68,68,.10); color:#b91c1c; border:1px solid rgba(239,68,68,.25); }
+  .diff-wrong { color:#b91c1c; text-decoration: underline; text-decoration-style: wavy; }
+  .footer { color: var(--text-muted); }
+  .link-toggle { display:flex; align-items:center; gap:.35rem; }
+  .tile.solved { border-color: rgba(16,185,129,.45); box-shadow: inset 0 0 0 2px rgba(16,185,129,.25); cursor: default; }
+  /* SVG overlay lines */
+  /* Ensure overlay never blocks clicks on tiles */
+  .link-layer { position:absolute; inset:0; pointer-events:none; }
+  .link-layer line { stroke: #60a5fa; stroke-width:2; opacity:.9; pointer-events: none; }
+  .link-layer .l2 { stroke: #34d399; }
+  .link-layer .l3 { stroke: #f472b6; }
+  .link-layer .l4 { stroke: #f59e0b; }
+</style>
+
+<div class="puzzle-wrap" id="puzzleApp" aria-live="polite">
+  <div class="puzzle-header">
+    <div>
+      <div class="puzzle-title">Japanese Syntax Puzzle</div>
+      <div class="muted"><span id="pTitle"></span></div>
+    </div>
+    <div class="controls index-page">
+      <label class="link-toggle"><input id="toggleLink" type="checkbox"> Link particles</label>
+      <button id="shuffleBtn" class="btn btn-secondary" type="button">Shuffle</button>
+      <button id="clearBtn" class="btn btn-secondary" type="button">Clear</button>
+      <button id="checkBtn" class="btn btn-primary" type="button">Check</button>
+      <button id="nextBtn" class="btn btn-secondary" type="button" disabled>Next</button>
+      <span class="muted">Attempts: <b id="attempts">0</b> · Time: <b id="timer" class="timer">00:00</b></span>
+    </div>
+  </div>
+
+  <div class="board" id="board">
+    <div class="answer" id="answer" aria-label="Answer area"></div>
+    <div class="bank" id="bank" aria-label="Tile bank"></div>
+    <svg class="link-layer" id="linkLayer"></svg>
+  </div>
+
+  <div id="result" class="banner" style="display:none"></div>
+  <div id="footerInfo" class="footer" style="display:none"></div>
+</div>
+
+<script>
+  (function(){
+    // Data
+    const PUZZLES = [
+      { id: 'q1', title: '助詞・基本', correct: 'わたしは毎日コーヒーを飲みます。', tokens: ['わたしは','毎日','コーヒー','を','飲みます','。'], furigana:[{base:'飲みます', ruby:'のみます'}], gloss: 'I drink coffee every day.' },
+      { id: 'q2', title: '語順', correct: 'このへやはきれいです。', tokens: ['この','へやは','きれい','です','。'], gloss: 'This room is clean.' },
+      { id: 'q3', title: '語順＋助詞', correct: '東京で写真を撮りました。', tokens: ['東京','で','写真','を','撮りました','。'], gloss: 'I took photos in Tokyo.' },
+    ];
+
+    // State
+    let idx = 0; let attempts = 0; let startTime = 0; let timerId = null;
+    let selectedForLink = null; const links = []; // [{a: tileId, b: tileId, cls:'l2'}]
+    const byId = (id) => document.getElementById(id);
+    const bank = byId('bank'); const answer = byId('answer'); const result = byId('result');
+    const pTitle = byId('pTitle'); const timerEl = byId('timer'); const attemptsEl = byId('attempts');
+    const linkLayer = byId('linkLayer'); const linkToggle = byId('toggleLink');
+    const nextBtn = byId('nextBtn');
+
+    function formatTime(s){ const m = Math.floor(s/60).toString().padStart(2,'0'); const ss = (s%60).toString().padStart(2,'0'); return m+':'+ss; }
+    function tick(){ const t = Math.floor((Date.now()-startTime)/1000); timerEl.textContent = formatTime(t); }
+    function startTimer(){ if (timerId) clearInterval(timerId); startTime = Date.now(); timerId = setInterval(tick, 1000); tick(); }
+    function stopTimer(){ if (timerId) clearInterval(timerId); timerId=null; }
+
+    function shuffle(arr){ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+    function clearBoard(){ answer.innerHTML=''; bank.innerHTML=''; links.length=0; drawLinks(); }
+
+    function renderTiles(tokens){
+      // Bank gets shuffled
+      const order = shuffle(tokens.map((t,i)=>({t, i})));
+      for (const {t, i} of order){ bank.appendChild(makeTile(t, 'b'+i)); }
+    }
+
+    function makeTile(text, id){
+      const el = document.createElement('button');
+      el.className = 'tile'; el.type='button'; el.draggable = true; el.textContent = text; el.dataset.id = id; el.setAttribute('aria-grabbed','false');
+      // Drag handlers
+      el.addEventListener('dragstart', (e)=>{ el.classList.add('dragging'); e.dataTransfer.setData('text/plain', id); });
+      el.addEventListener('dragend', ()=> el.classList.remove('dragging'));
+      // Tap/click: move tile when link mode off; else link drawing
+      el.addEventListener('click', ()=>{ if (!linkToggle.checked){ const parent = el.parentElement; if (parent === bank){ answer.appendChild(el); } else { bank.appendChild(el); } drawLinks(); } else { handleLinkClick(el); } });
+      // Keyboard (Space to move between bank<->answer at end)
+      el.addEventListener('keydown', (e)=>{
+        if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); const parent = el.parentElement; if (parent === bank){ answer.appendChild(el); } else { bank.appendChild(el); } drawLinks(); }
+      });
+      return el;
+    }
+
+    function handleLinkClick(el){
+      if (!selectedForLink){ selectedForLink = el; el.style.outline='2px solid #60a5fa'; return; }
+      if (selectedForLink === el){ selectedForLink.style.outline=''; selectedForLink=null; return; }
+      // Create link
+      const cls = ['l1','l2','l3','l4'][links.length % 4];
+      links.push({ a: selectedForLink.dataset.id, b: el.dataset.id, cls: cls });
+      selectedForLink.style.outline=''; selectedForLink=null; drawLinks();
+    }
+
+    function tileCenter(el){ const r = el.getBoundingClientRect(); const p = board.getBoundingClientRect(); return { x: r.left - p.left + r.width/2, y: r.top - p.top + r.height/2 } }
+
+    function drawLinks(){
+      linkLayer.innerHTML=''; if (!linkToggle.checked) return;
+      const frag = document.createDocumentFragment();
+      links.forEach((L, i)=>{ const a = document.querySelector(`[data-id="${L.a}"]`); const b = document.querySelector(`[data-id="${L.b}"]`); if (!a||!b) return; const p1 = a.getBoundingClientRect(); const p2 = b.getBoundingClientRect(); const root = board.getBoundingClientRect();
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1', (p1.left - root.left + p1.width/2));
+        line.setAttribute('y1', (p1.top - root.top + p1.height/2));
+        line.setAttribute('x2', (p2.left - root.left + p2.width/2));
+        line.setAttribute('y2', (p2.top - root.top + p2.height/2));
+        line.setAttribute('class', L.cls);
+        frag.appendChild(line);
+      });
+      linkLayer.appendChild(frag);
+    }
+
+    // Drop logic for bank and answer (reorder in answer)
+    [bank, answer].forEach(zone=>{
+      zone.addEventListener('dragover', (e)=>{ e.preventDefault(); const dragging = document.querySelector('.tile.dragging'); if (!dragging) return; const after = getDragAfterElement(zone, e.clientX); if (after == null) zone.appendChild(dragging); else zone.insertBefore(dragging, after); drawLinks(); });
+      zone.addEventListener('drop', (e)=>{ e.preventDefault(); drawLinks(); });
+    });
+
+    function getDragAfterElement(container, x){ const els = [...container.querySelectorAll('.tile:not(.dragging)')]; return els.reduce((closest, child)=>{ const box = child.getBoundingClientRect(); const offset = x - box.left - box.width/2; if (offset < 0 && offset > closest.offset){ return { offset, element: child }; } else { return closest; } }, { offset: Number.NEGATIVE_INFINITY }).element; }
+
+    function currentAnswer(){ return [...answer.querySelectorAll('.tile')].map(el=>el.textContent).join(''); }
+
+    function setBanner(ok, html){ result.style.display='block'; result.className = 'banner ' + (ok? 'ok':'err'); result.innerHTML = html; }
+
+    function hideBanner(){ result.style.display='none'; result.textContent=''; result.className='banner'; }
+
+    function showFooter(info){ const el = document.getElementById('footerInfo'); el.style.display='block'; el.innerHTML = info; }
+    function hideFooter(){ const el = document.getElementById('footerInfo'); el.style.display='none'; el.textContent=''; }
+
+    function minimalDiff(user, correct){
+      // naive token diff by splitting with known tokens, fallback char-wise
+      const toks = PUZZLES[idx].tokens;
+      // Build from user tokens
+      const u = [...answer.querySelectorAll('.tile')].map(el=>el.textContent);
+      let out = [];
+      for (let i=0;i<Math.max(u.length, toks.length);i++){
+        const ut = u[i]; const ct = toks[i]; if (ut === ct){ out.push(ut); } else { if (ut) out.push('<span class="diff-wrong">'+ut+'</span>'); }
+      }
+      return out.join('');
+    }
+
+    function encourage(secs, tries){
+      const msgs = [
+        'Nice work!',
+        'Excellent!',
+        'Great job!',
+        'すばらしい！',
+        'Perfect!'
+      ];
+      const m = msgs[Math.floor(Math.random()*msgs.length)];
+      return `${m} Solved in ${formatTime(secs)} with ${tries} ${tries===1?'try':'tries'}.`;
+    }
+
+    function onCheck(){
+      attempts++; attemptsEl.textContent = attempts;
+      const ans = currentAnswer(); const corr = PUZZLES[idx].correct;
+      if (ans === corr){
+        stopTimer();
+        const secs = Math.floor((Date.now()-startTime)/1000);
+        setBanner(true, encourage(secs, attempts));
+        // lock tiles
+        [...document.querySelectorAll('.tile')].forEach(t=>{ t.disabled = true; t.draggable = false; t.classList.add('solved'); });
+        nextBtn.disabled = false;
+        // Save best time
+        try{
+          const key = 'puzzle:best:'+PUZZLES[idx].id;
+          const prev = parseInt(localStorage.getItem(key)||'99999',10); if (secs < prev) localStorage.setItem(key, String(secs));
+        }catch(e){}
+      } else {
+        const diff = minimalDiff(ans, corr);
+        setBanner(false, 'Not quite. Check highlighted tokens: ' + diff + `<div class="muted" style="margin-top:.35rem;">Correct: ${corr}</div>`);
+      }
+      // Reveal footer info
+      const p = PUZZLES[idx];
+      let furigana = p.furigana ? p.furigana.map(f=>`${f.base}(${f.ruby})`).join('、') : '';
+      const info = `<div>Romaji/Furigana: ${furigana || '—'}</div><div>English: ${p.gloss || '—'}</div>`;
+      showFooter(info);
+    }
+
+    function onShuffle(){ const toks = PUZZLES[idx].tokens; // reshuffle only bank tiles
+      const tiles = [...bank.querySelectorAll('.tile')];
+      const order = shuffle(tiles);
+      for(const t of order){ bank.appendChild(t); }
+      drawLinks(); }
+
+    function onClear(){ [...answer.querySelectorAll('.tile')].forEach(t=>bank.appendChild(t)); hideBanner(); hideFooter(); nextBtn.disabled = true; drawLinks(); }
+
+    function load(i){ idx = i % PUZZLES.length; attempts = 0; attemptsEl.textContent = '0'; hideBanner(); hideFooter(); nextBtn.disabled = true; clearBoard();
+      const p = PUZZLES[idx]; pTitle.textContent = `${p.title} · ${p.id}`; renderTiles(p.tokens); startTimer(); }
+
+    document.getElementById('shuffleBtn').addEventListener('click', onShuffle);
+    document.getElementById('clearBtn').addEventListener('click', onClear);
+    document.getElementById('checkBtn').addEventListener('click', onCheck);
+    nextBtn.addEventListener('click', ()=> load(idx+1));
+    linkToggle.addEventListener('change', ()=>{ selectedForLink=null; drawLinks(); });
+
+    const board = document.getElementById('board');
+    window.addEventListener('resize', drawLinks);
+
+    // Init
+    load(0);
+  })();
+</script>
+{% endblock %}

@@ -36,6 +36,10 @@
           <span class="icon"><img src="{% static 'core/game-icon.svg' %}" alt="" width="16" height="16"></span>
           <span class="label">Grammar Game</span>
         </a>
+        <a href="{% url 'puzzle' %}" class="sidebar-link{% if request.resolver_match.url_name == 'puzzle' %} active{% endif %}">
+          <span class="icon"><img src="{% static 'core/cards-icon.svg' %}" alt="" width="16" height="16"></span>
+          <span class="label">Puzzle</span>
+        </a>
         <a href="{% url 'flashcard' %}" class="sidebar-link{% if request.resolver_match.url_name == 'flashcard' %} active{% endif %}">
           <span class="icon"><img src="{% static 'core/cards-icon.svg' %}" alt="" width="16" height="16"></span>
           <span class="label">Flashcards</span>

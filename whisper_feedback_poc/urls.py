@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from django.views.generic import RedirectView
-from core.views import home, index, signup, feedback, history, flashcard, pronunciation, grammar_game, grammar_play, grammar_submit, grammar_explain, grammar_history, profile, password_update, batch_correct, batch_create, batch_status, batch_download, batch_cancel, batch_history
+from core.views import home, index, signup, feedback, history, flashcard, pronunciation, grammar_game, grammar_play, grammar_submit, grammar_explain, grammar_history, profile, password_update, batch_correct, batch_create, batch_status, batch_download, batch_cancel, batch_history, puzzle
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -26,6 +26,7 @@ urlpatterns = [
     path('grammar-game/submit', grammar_submit, name='grammar_submit'),
     path('grammar-game/explain', grammar_explain, name='grammar_explain'),
     path('grammar-game/history', grammar_history, name='grammar_history'),
+    path('puzzle/', puzzle, name='puzzle'),
     # Profile
     path('profile/', profile, name='profile'),
     # Auth
