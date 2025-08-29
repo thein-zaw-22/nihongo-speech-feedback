@@ -8,13 +8,27 @@
   .puzzle-title { font-weight:800; color: var(--text-primary); font-size:1.05rem; }
   .muted { color: var(--text-muted); }
   .board { position:relative; display:grid; gap:.6rem; }
+  .zone-title { font-size:.85rem; font-weight:700; color: var(--text-secondary); margin-bottom:.2rem; }
   .bank, .answer { display:flex; flex-wrap:wrap; gap:.5rem; padding:.6rem; border:1px solid var(--border-color); border-radius:12px; background: var(--bg-secondary); min-height:54px; }
-  .answer { background: rgba(102,126,234,.05); }
-  .tile { display:inline-flex; align-items:center; justify-content:center; padding:.45rem .7rem; border:1px solid var(--border-color); border-radius:12px; background: var(--bg-primary); box-shadow: 0 1px 2px rgba(0,0,0,.06); cursor: grab; user-select:none; touch-action:none; min-height:44px; min-width:44px; font-weight:700; }
+  .answer { background: rgba(102,126,234,.06); }
+  .tile {
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:.55rem .9rem; min-height:44px; min-width:44px;
+    border-radius:12px; font-weight:700; cursor: grab; user-select:none; touch-action:none;
+    border:1px solid var(--border-color);
+    background: linear-gradient(180deg, var(--bg-primary) 0%, rgba(102,126,234,.03) 100%);
+    box-shadow:
+      0 1px 2px rgba(0,0,0,.05),
+      0 6px 14px rgba(102,126,234,.12);
+    transition: transform .12s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+  }
+  .tile:hover { transform: translateY(-1px); border-color: rgba(102,126,234,.35); box-shadow: 0 2px 4px rgba(0,0,0,.06), 0 10px 20px rgba(102,126,234,.18); }
+  .tile:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 10px rgba(102,126,234,.14); }
+  .tile:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(102,126,234,.28), 0 6px 14px rgba(102,126,234,.18); }
   .tile.dragging { opacity:.6; }
   .slot-hint { display:inline-block; width:8px; height:32px; background: rgba(102,126,234,.25); border-radius:4px; }
-  .controls { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
-  .controls .btn { height:auto; padding:.45rem .8rem; }
+  .controls { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; justify-content:flex-start; margin-top:.5rem; }
+  .controls .btn { height:auto; padding:.55rem .9rem; border-radius:8px; }
   .timer { font-variant-numeric: tabular-nums; }
   .banner { border-radius:12px; padding:.6rem .8rem; font-weight:700; }
   .banner.ok { background: rgba(16,185,129,.12); color:#047857; border:1px solid rgba(16,185,129,.25); }
@@ -22,7 +36,11 @@
   .diff-wrong { color:#b91c1c; text-decoration: underline; text-decoration-style: wavy; }
   .footer { color: var(--text-muted); }
   .link-toggle { display:flex; align-items:center; gap:.35rem; }
-  .tile.solved { border-color: rgba(16,185,129,.45); box-shadow: inset 0 0 0 2px rgba(16,185,129,.25); cursor: default; }
+  /* Explain box style aligned with Grammar Game */
+  .explain { margin-top:.5rem; font-size:.95rem; background: var(--bg-primary); border:1px solid var(--border-color); border-radius:10px; padding:.6rem .8rem; overflow-wrap:anywhere; word-break:break-word; }
+  .explain ul { margin:.35rem 0 .35rem 1.1rem; padding:0; list-style: disc; }
+  .explain li { margin:.15rem 0; }
+  .tile.solved { cursor: default; border-color: rgba(16,185,129,.45); background: linear-gradient(180deg, rgba(16,185,129,.08) 0%, rgba(16,185,129,.02) 100%); box-shadow: inset 0 0 0 2px rgba(16,185,129,.25), 0 6px 14px rgba(16,185,129,.12); }
   /* SVG overlay lines */
   /* Ensure overlay never blocks clicks on tiles */
   .link-layer { position:absolute; inset:0; pointer-events:none; }
@@ -30,6 +48,7 @@
   .link-layer .l2 { stroke: #34d399; }
   .link-layer .l3 { stroke: #f472b6; }
   .link-layer .l4 { stroke: #f59e0b; }
+  @media (max-width: 720px){ .puzzle-header{flex-direction:column; align-items:flex-start; gap:.25rem;} .controls{justify-content:center;} }
 </style>
 
 <div class="puzzle-wrap" id="puzzleApp" aria-live="polite">
@@ -38,24 +57,33 @@
       <div class="puzzle-title">Japanese Syntax Puzzle</div>
       <div class="muted"><span id="pTitle"></span></div>
     </div>
-    <div class="controls index-page">
-      <label class="link-toggle"><input id="toggleLink" type="checkbox"> Link particles</label>
-      <button id="shuffleBtn" class="btn btn-secondary" type="button">Shuffle</button>
-      <button id="clearBtn" class="btn btn-secondary" type="button">Clear</button>
-      <button id="checkBtn" class="btn btn-primary" type="button">Check</button>
-      <button id="nextBtn" class="btn btn-secondary" type="button" disabled>Next</button>
-      <span class="muted">Attempts: <b id="attempts">0</b> · Time: <b id="timer" class="timer">00:00</b></span>
-    </div>
+    <div class="muted">Attempts: <b id="attempts">0</b> · Time: <b id="timer" class="timer">00:00</b></div>
   </div>
 
   <div class="board" id="board">
-    <div class="answer" id="answer" aria-label="Answer area"></div>
-    <div class="bank" id="bank" aria-label="Tile bank"></div>
+    <div>
+      <div class="zone-title">Answer</div>
+      <div class="answer" id="answer" aria-label="Answer area"></div>
+    </div>
+    <div>
+      <div class="zone-title">Bank</div>
+      <div class="bank" id="bank" aria-label="Tile bank"></div>
+    </div>
     <svg class="link-layer" id="linkLayer"></svg>
   </div>
 
   <div id="result" class="banner" style="display:none"></div>
   <div id="footerInfo" class="footer" style="display:none"></div>
+
+  <div class="controls index-page">
+    <label class="link-toggle"><input id="toggleLink" type="checkbox"> Link particles</label>
+    <button id="shuffleBtn" class="btn btn-secondary" type="button">Shuffle</button>
+    <button id="clearBtn" class="btn btn-secondary" type="button">Clear</button>
+    <button id="checkBtn" class="btn btn-primary" type="button">Check</button>
+    <button id="nextBtn" class="btn btn-secondary" type="button" disabled>Next</button>
+    <button id="explainMore" class="btn btn-secondary" type="button" style="margin-left:auto;">Explain More <span id="explainSpin" class="spinner" style="display:none; margin-left:.25rem; width:14px; height:14px; border:2px solid rgba(102,126,234,.35); border-top-color: var(--brand); border-radius:50%; animation: spin 1s linear infinite;"></span></button>
+  </div>
+  <div class="explain" id="explainMoreBox" style="display:none;"></div>
 </div>
 
 <script>
@@ -75,6 +103,9 @@
     const pTitle = byId('pTitle'); const timerEl = byId('timer'); const attemptsEl = byId('attempts');
     const linkLayer = byId('linkLayer'); const linkToggle = byId('toggleLink');
     const nextBtn = byId('nextBtn');
+    const explainBtn = document.getElementById('explainMore');
+    const explainSpin = document.getElementById('explainSpin');
+    const explainBox = document.getElementById('explainMoreBox');
 
     function formatTime(s){ const m = Math.floor(s/60).toString().padStart(2,'0'); const ss = (s%60).toString().padStart(2,'0'); return m+':'+ss; }
     function tick(){ const t = Math.floor((Date.now()-startTime)/1000); timerEl.textContent = formatTime(t); }
@@ -205,7 +236,7 @@
       for(const t of order){ bank.appendChild(t); }
       drawLinks(); }
 
-    function onClear(){ [...answer.querySelectorAll('.tile')].forEach(t=>bank.appendChild(t)); hideBanner(); hideFooter(); nextBtn.disabled = true; drawLinks(); }
+    function onClear(){ [...answer.querySelectorAll('.tile')].forEach(t=>bank.appendChild(t)); hideBanner(); hideFooter(); nextBtn.disabled = true; drawLinks(); if (explainBox){ explainBox.style.display='none'; explainBox.innerHTML=''; } }
 
     function load(i){ idx = i % PUZZLES.length; attempts = 0; attemptsEl.textContent = '0'; hideBanner(); hideFooter(); nextBtn.disabled = true; clearBoard();
       const p = PUZZLES[idx]; pTitle.textContent = `${p.title} · ${p.id}`; renderTiles(p.tokens); startTimer(); }
@@ -218,6 +249,38 @@
 
     const board = document.getElementById('board');
     window.addEventListener('resize', drawLinks);
+
+    // Explain more via LLM (reuse grammar endpoint)
+    function getCookie(name){ const v = `; ${document.cookie}`.split(`; ${name}=`); if (v.length===2) return v.pop().split(';').shift(); }
+    let explainCache = null;
+    async function explain(){
+      if (!explainBox) return;
+      if (explainBox.style.display === 'block'){ explainBox.style.display='none'; return; }
+      if (explainCache){ explainBox.innerHTML = explainCache; explainBox.style.display='block'; return; }
+      if (explainBtn){ explainBtn.disabled = true; if (explainSpin) explainSpin.style.display='inline-block'; }
+      try{
+        const p = PUZZLES[idx];
+        const prompt = `Reconstruct the sentence from tokens: ${p.tokens.join(' / ')}`;
+        const res = await fetch('/grammar-game/explain', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken': getCookie('csrftoken')}, body: JSON.stringify({ prompt, level:'N5', category:'word_order', user_answer: currentAnswer(), correct_text: p.correct }) });
+        const j = await res.json();
+        if (j.ok){
+          const ex = j.explanation || {};
+          const examples = (ex.examples||[]).map(e=>`<li>${e}</li>`).join('');
+          const tips = (ex.tips||[]).map(e=>`<li>${e}</li>`).join('');
+          const html = `
+            ${ex.summary ? `<p><strong>Summary:</strong> ${ex.summary}</p>`: ''}
+            ${ex.grammar_point ? `<p><strong>Grammar:</strong> ${ex.grammar_point}</p>`: ''}
+            ${ex.why_correct ? `<p><strong>Why correct:</strong> ${ex.why_correct}</p>`: ''}
+            ${ex.why_incorrect ? `<p><strong>Why your answer:</strong> ${ex.why_incorrect}</p>`: ''}
+            ${examples ? `<div><strong>Examples:</strong><ul>${examples}</ul></div>`: ''}
+            ${tips ? `<div><strong>Tips:</strong><ul>${tips}</ul></div>`: ''}
+          `;
+          explainCache = html; explainBox.innerHTML = html; explainBox.style.display='block';
+        }
+      } catch(e){}
+      if (explainBtn){ if (explainSpin) explainSpin.style.display='none'; explainBtn.disabled = false; }
+    }
+    if (explainBtn) explainBtn.addEventListener('click', explain);
 
     // Init
     load(0);
