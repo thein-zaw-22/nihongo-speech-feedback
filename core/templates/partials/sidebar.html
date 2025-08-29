@@ -64,7 +64,7 @@
         </a>
         <a href="{% url 'password_update' %}" class="sidebar-link{% if request.resolver_match.url_name == 'password_update' %} active{% endif %}">
           <span class="icon"><img src="{% static 'core/lock-icon.svg' %}" alt="" width="16" height="16"></span>
-          <span class="label">Security</span>
+          <span class="label">Change Password</span>
         </a>
         <form action="{% url 'logout' %}" method="post" style="margin-top:.5rem; padding-top:.5rem; border-top:1px solid var(--border-color);">
           {% csrf_token %}

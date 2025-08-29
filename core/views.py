@@ -900,16 +900,29 @@ def profile(request):
     from .models import Profile as UserProfile
     profile_obj, _ = UserProfile.objects.get_or_create(user=request.user)
     if request.method == 'POST':
-        user_form = ProfileForm(request.POST, instance=request.user)
-        avatar_form = ProfileAvatarForm(request.POST, request.FILES, instance=profile_obj)
-        if user_form.is_valid() and avatar_form.is_valid():
-            user_form.save()
-            avatar_form.save()
-            try:
-                dj_messages.success(request, 'Profile updated successfully.')
-            except Exception:
-                pass
-            return redirect('profile')
+        # Special-case: avatar removal posts only the remove flag
+        if request.POST.get('remove_avatar'):
+            avatar_form = ProfileAvatarForm({'remove_avatar': True}, instance=profile_obj)
+            if avatar_form.is_valid():
+                avatar_form.save()
+                try:
+                    dj_messages.success(request, 'Avatar removed.')
+                except Exception:
+                    pass
+                return redirect('profile')
+            # If somehow invalid, fall through to normal rendering
+            user_form = ProfileForm(instance=request.user)
+        else:
+            user_form = ProfileForm(request.POST, instance=request.user)
+            avatar_form = ProfileAvatarForm(request.POST, request.FILES, instance=profile_obj)
+            if user_form.is_valid() and avatar_form.is_valid():
+                user_form.save()
+                avatar_form.save()
+                try:
+                    dj_messages.success(request, 'Profile updated successfully.')
+                except Exception:
+                    pass
+                return redirect('profile')
     else:
         user_form = ProfileForm(instance=request.user)
         avatar_form = ProfileAvatarForm(instance=profile_obj)
