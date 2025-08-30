@@ -100,3 +100,18 @@ class BatchJob(models.Model):
         if self.total_rows:
             return int((self.processed_rows / max(1, self.total_rows)) * 100)
         return 0
+
+
+# ---------------- Puzzle (Japanese Syntax) ----------------
+class Puzzle(models.Model):
+    title = models.CharField(max_length=100)
+    correct = models.TextField(help_text="Correct sentence")
+    tokens = models.JSONField(help_text="List of token strings in order", default=list)
+    furigana = models.JSONField(blank=True, default=list, help_text="Optional list of {base,ruby}")
+    gloss = models.TextField(blank=True, help_text="English gloss")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Puzzle({self.title})"

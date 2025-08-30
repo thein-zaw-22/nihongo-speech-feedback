@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.utils.html import format_html
 import csv, io, json
 
-from .models import GrammarQuestion, GrammarChoice, GrammarGameSession, Transcription, Profile, BatchJob
+from .models import GrammarQuestion, GrammarChoice, GrammarGameSession, Transcription, Profile, BatchJob, Puzzle
 
 
 class ChoiceInline(admin.TabularInline):
@@ -118,3 +118,64 @@ class BatchJobAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "provider", "status", "processed_rows", "total_rows", "created_at")
     list_filter = ("status", "provider")
     search_fields = ("user__username",)
+
+
+@admin.register(Puzzle)
+class PuzzleAdmin(admin.ModelAdmin):
+    list_display = ("title", "is_active", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("title", "correct", "gloss")
+    change_list_template = "admin/puzzle_changelist.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path("import/", self.admin_site.admin_view(self.import_view), name="puzzle_import"),
+        ]
+        return custom + urls
+
+    def import_view(self, request):
+        if request.method == 'POST' and request.FILES.get('file'):
+            f = request.FILES['file']
+            name = f.name.lower()
+            created = 0
+            try:
+                if name.endswith('.csv'):
+                    data = io.StringIO(f.read().decode('utf-8'))
+                    reader = csv.DictReader(data)
+                    for row in reader:
+                        tokens = row.get('tokens', '')
+                        toks = []
+                        if tokens:
+                            toks = json.loads(tokens) if tokens.strip().startswith('[') else [t.strip() for t in tokens.split('|') if t.strip()]
+                        furigana = row.get('furigana', '').strip()
+                        furi = json.loads(furigana) if (furigana.startswith('[') or furigana.startswith('{')) else []
+                        Puzzle.objects.create(
+                            title=row.get('title', ''),
+                            correct=row.get('correct', ''),
+                            tokens=toks,
+                            furigana=furi,
+                            gloss=row.get('gloss', ''),
+                            is_active=str(row.get('is_active', '1')).strip() not in ('0','false','False')
+                        )
+                        created += 1
+                    messages.success(request, f"Imported {created} puzzles from CSV.")
+                elif name.endswith('.json'):
+                    payload = json.loads(f.read().decode('utf-8'))
+                    for row in payload:
+                        Puzzle.objects.create(
+                            title=row.get('title', ''),
+                            correct=row.get('correct', ''),
+                            tokens=row.get('tokens', []) or [],
+                            furigana=row.get('furigana', []) or [],
+                            gloss=row.get('gloss', ''),
+                            is_active=bool(row.get('is_active', True))
+                        )
+                        created += 1
+                    messages.success(request, f"Imported {created} puzzles from JSON.")
+                else:
+                    messages.error(request, "Unsupported file type. Use CSV or JSON.")
+            except Exception as e:
+                messages.error(request, f"Import failed: {e}")
+            return redirect('..')
+        return render(request, 'admin/puzzle_import.html')

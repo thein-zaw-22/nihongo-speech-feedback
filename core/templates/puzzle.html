@@ -89,7 +89,7 @@
 <script>
   (function(){
     // Data
-    const PUZZLES = [
+    let PUZZLES = [
       { id: 'q1', title: '助詞・基本', correct: 'わたしは毎日コーヒーを飲みます。', tokens: ['わたしは','毎日','コーヒー','を','飲みます','。'], furigana:[{base:'飲みます', ruby:'のみます'}], gloss: 'I drink coffee every day.' },
       { id: 'q2', title: '語順', correct: 'このへやはきれいです。', tokens: ['この','へやは','きれい','です','。'], gloss: 'This room is clean.' },
       { id: 'q3', title: '語順＋助詞', correct: '東京で写真を撮りました。', tokens: ['東京','で','写真','を','撮りました','。'], gloss: 'I took photos in Tokyo.' },
@@ -282,8 +282,15 @@
     }
     if (explainBtn) explainBtn.addEventListener('click', explain);
 
-    // Init
-    load(0);
+    // Try to load from server; fallback to demo
+    (async function(){
+      try{
+        const res = await fetch('/puzzle/data', {headers:{'X-Requested-With':'XMLHttpRequest'}});
+        const j = await res.json();
+        if (j && j.ok && Array.isArray(j.items) && j.items.length){ PUZZLES = j.items; }
+      } catch(e){}
+      load(0);
+    })();
   })();
 </script>
 {% endblock %}

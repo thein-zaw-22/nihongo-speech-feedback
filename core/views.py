@@ -25,7 +25,7 @@ import io
 import csv
 from .models import Transcription
 from .models import GrammarQuestion, GrammarChoice, GrammarGameSession
-from .models import BatchJob
+from .models import BatchJob, Puzzle
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -898,6 +898,23 @@ def batch_history(request):
 def puzzle(request):
     """Render the Japanese Syntax Puzzle page (client-side logic)."""
     return render(request, 'puzzle.html')
+
+
+@login_required
+def puzzle_data(request):
+    """Return active puzzles as JSON for the Puzzle page."""
+    from django.http import JsonResponse
+    items = []
+    for p in Puzzle.objects.filter(is_active=True).order_by('created_at')[:100]:
+        items.append({
+            'id': str(p.id),
+            'title': p.title,
+            'correct': p.correct,
+            'tokens': p.tokens or [],
+            'furigana': p.furigana or [],
+            'gloss': p.gloss or '',
+        })
+    return JsonResponse({'ok': True, 'items': items})
 
 
 @login_required

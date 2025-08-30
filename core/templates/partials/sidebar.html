@@ -10,6 +10,10 @@
         <span class="sidebar-title">General</span>
       </button>
       <div id="sb-main" class="sidebar-body">
+        <a href="{% url 'home' %}" class="sidebar-link{% if request.resolver_match.url_name == 'home' %} active{% endif %}">
+          <span class="icon"><img src="{% static 'core/home-icon.svg' %}" alt="" width="16" height="16"></span>
+          <span class="label">Home</span>
+        </a>
         <a href="{% url 'index' %}" class="sidebar-link{% if request.resolver_match.url_name == 'index' %} active{% endif %}">
           <span class="icon"><img src="{% static 'core/target-icon.svg' %}" alt="" width="16" height="16"></span>
           <span class="label">AI Feedback</span>

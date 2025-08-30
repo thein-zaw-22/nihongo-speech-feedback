@@ -1,0 +1,28 @@
+{% extends 'admin/base_site.html' %}
+{% block content %}
+  <h1>Import Puzzles</h1>
+  <p>Upload a CSV or JSON file with puzzle data.</p>
+  <div class="module">
+    <form method="post" enctype="multipart/form-data" style="padding:1rem;">
+      {% csrf_token %}
+      <input type="file" name="file" accept=".csv,.json" required>
+      <button type="submit" class="default">Import</button>
+    </form>
+  </div>
+  <h3>CSV Format</h3>
+  <pre>title,correct,tokens,furigana,gloss,is_active
+助詞・基本,わたしは毎日コーヒーを飲みます。,"わたしは|毎日|コーヒー|を|飲みます|。","[{\"base\":\"飲みます\",\"ruby\":\"のみます\"}]",I drink coffee every day.,1
+語順,このへやはきれいです。,"この|へやは|きれい|です|。",,This room is clean.,1
+</pre>
+  <h3>JSON Format</h3>
+  <pre>[{
+  "title":"助詞・基本",
+  "correct":"わたしは毎日コーヒーを飲みます。",
+  "tokens":["わたしは","毎日","コーヒー","を","飲みます","。"],
+  "furigana":[{"base":"飲みます","ruby":"のみます"}],
+  "gloss":"I drink coffee every day.",
+  "is_active":true
+}]
+  </pre>
+{% endblock %}
+
