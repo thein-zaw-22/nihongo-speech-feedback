@@ -1,19 +1,28 @@
-## Whisper Feedback POC (Django)
+## AI Japanese Learning Platform (Django)
 
-AI-powered Japanese speaking feedback: upload or record audio, transcribe locally with Whisper, then get natural Japanese corrections and concise explanations from a configurable LLM provider.
+Comprehensive Japanese learning platform with AI-powered feedback, spaced repetition flashcards, interactive games, and mobile-friendly design.
 
-### Overview
-- Local transcription using `openai-whisper` (Whisper) with the `base` model
-- Feedback generation using OpenAI `gpt-4o-mini` or Amazon Bedrock (configurable `BEDROCK_MODEL_ID`, default `amazon.nova-lite-v1:0`). Note: Amazon Nova models require an inference profile rather than on-demand.
-- Django app with Postgres storage for uploaded audio, transcript, and structured feedback
-- Simple UI for recording/uploading audio and viewing corrections
+### Features
+- **AI Speaking Feedback**: Upload or record audio, transcribe with Whisper, get natural corrections from configurable LLM providers
+- **Spaced Repetition Flashcards**: SM-2 algorithm for optimized vocabulary learning with progress tracking
+- **Grammar Game**: Interactive multiple-choice questions with JLPT levels and categories
+- **Syntax Puzzle**: Drag-and-drop sentence reconstruction with mobile touch support
+- **Batch Processing**: CSV/Excel file correction for bulk text processing
+- **Multi-Provider LLM**: OpenAI GPT, Google Gemini, or Amazon Bedrock support
+- **Mobile-First Design**: Responsive UI optimized for both mobile and desktop
+
+### Core Components
+- Local transcription using `openai-whisper` (Whisper) with configurable models
+- LLM feedback from OpenAI `gpt-4o-mini`, Google Gemini, or Amazon Bedrock
+- Django app with Postgres storage and comprehensive admin interface
+- Modern responsive UI with dark/light theme support
 
 ### Architecture
-- `core/views.py`: handles uploads, runs Whisper transcription, calls the configured LLM provider, saves `Transcription`
-- `core/models.py`: `Transcription` model (`audio_file`, `transcript`, `feedback` JSON, timestamps)
-- `core/templates/`: `index.html` (record/upload) and `result.html` (transcript, corrections, debug logs)
-- `whisper_feedback_poc/settings.py`: Postgres config (for Docker), media/static, dotenv load
-- `Dockerfile` + `docker-compose.yml`: app container (with ffmpeg) and Postgres service
+- **Backend**: Django with PostgreSQL, user authentication, and admin interface
+- **Models**: Transcriptions, Flashcards with spaced repetition progress, Grammar questions, Puzzles, Batch jobs
+- **Views**: Multi-provider LLM integration, spaced repetition algorithms, game logic, batch processing
+- **Templates**: Mobile-responsive UI with modern card-based design and touch support
+- **Docker**: Containerized deployment with ffmpeg support and database persistence
 
 ### Requirements
 - LLM API Keys (see Configuration section)
@@ -58,9 +67,12 @@ docker-compose run --rm web python manage.py migrate
 docker-compose up
 ```
 
-4) Open `http://localhost:8000` and:
-- Click "Record" to capture audio in-browser, or click "Upload File" to select an audio file
-- Click "Submit for Analysis" to transcribe and get feedback
+4) Open `http://localhost:8000` and explore:
+- **Speak AI**: Record or upload audio for AI feedback
+- **Flashcards**: Practice vocabulary with spaced repetition
+- **Grammar Game**: Play interactive grammar quizzes
+- **Puzzle**: Reconstruct Japanese sentences
+- **Batch Correction**: Process CSV/Excel files in bulk
 
 Notes:
 - The first transcription will download the Whisper `base` model, which can take time.
@@ -94,17 +106,19 @@ python manage.py runserver
 
 ### Configuration
 - Environment variables (loaded via `python-dotenv` from `.env`):
-  - `LLM_PROVIDER`: The language model provider. Can be `openai` (default) or `bedrock`.
-  - `OPENAI_API_KEY`: Required if `LLM_PROVIDER` is `openai`.
-  - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME`: Required if `LLM_PROVIDER` is `bedrock`.
-  - `AWS_SESSION_TOKEN`: Optional, if using temporary credentials.
-  - `BEDROCK_MODEL_ID`: Bedrock model ID for the Converse API. Defaults to `amazon.nova-lite-v1:0`. You must enable access to the chosen model in the Bedrock Console for your AWS account and region.
-  - `BEDROCK_INFERENCE_PROFILE_ARN`: Required for Nova models. Set an inference profile ARN or ID and the app will call Converse with that profile. The app does not fall back to on-demand `modelId` for Bedrock.
-  - Per-model RPM caps for the simple limiter (Requests Per Minute):
-    - `OPENAI_GPT4O_RPM` (default 1000)
-    - `OPENAI_GPT4O_MINI_RPM` (default 3500)
-    - `GEMINI_25_FLASH_LITE_RPM` (default 15)
-    - `AWS_NOVA_LITE_RPM` (default 1000)
+  - `LLM_PROVIDER`: Provider choice - `openai`, `gemini`, or `bedrock`
+  - `OPENAI_API_KEY`: Required for OpenAI
+  - `OPENAI_MODEL_ID`: OpenAI model (default: `gpt-4o-mini`)
+  - `GEMINI_API_KEY`: Required for Google Gemini
+  - `GEMINI_MODEL_ID`: Gemini model (default: `gemini-2.5-flash-lite`)
+  - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME`: Required for Bedrock
+  - `AWS_SESSION_TOKEN`: Optional for temporary credentials
+  - `BEDROCK_MODEL_ID`: Bedrock model (default: `us.amazon.nova-lite-v1:0`)
+  - `BEDROCK_INFERENCE_PROFILE_ARN`: Required for Nova models
+  - Per-model RPM limits for rate limiting:
+    - `OPENAI_GPT4O_RPM`, `OPENAI_GPT4O_MINI_RPM`
+    - `GEMINI_25_FLASH_LITE_RPM`
+    - `AWS_NOVA_LITE_RPM`
 
 - Django settings highlights:
   - `SECRET_KEY` is a placeholder in code; change it for any non-local use
@@ -112,22 +126,58 @@ python manage.py runserver
   - `ALLOWED_HOSTS=[]`; adjust for deployments
   - Media: `MEDIA_URL=/media/`, `MEDIA_ROOT=media/`
 
-### How it works
-1) Whisper transcription
-   - `core/views.py` loads the Whisper `base` model and transcribes the uploaded/recorded file
-2) LLM Feedback
-   - The transcript is sent to the configured LLM provider (OpenAI or Bedrock) with a strict system prompt to return JSON:
-     `{ "corrected_text": string, "corrections": Array<{ original, corrected, explanation }> }`
-   - The app parses the JSON, with a fallback that extracts a JSON block if the response contains extra text
-3) Persistence
-   - A `Transcription` row is saved with the uploaded audio, transcript, and feedback JSON
-4) Presentation
-   - `result.html` displays audio playback, transcript, corrected text, explanations, and optional debug logs
+### Technical Implementation
 
-### Changing model choices
-- Whisper size: edit `core/views.py` and change `whisper.load_model("base")` to e.g. `"small"`, `"medium"`, etc. Larger models are slower but more accurate.
-- OpenAI model: edit the `model="gpt-4o-mini"` parameter in the `get_openai_feedback` function in `core/views.py`.
-- Bedrock (Nova): set `BEDROCK_MODEL_ID=amazon.nova-lite-v1:0` and `BEDROCK_INFERENCE_PROFILE_ARN=<your profile ARN or ID>`. The app requires a profile for Bedrock usage by default.
+#### AI Feedback Pipeline
+1. **Audio Processing**: Whisper transcribes uploaded/recorded audio to Japanese text
+2. **LLM Analysis**: Configured provider analyzes text for naturalness and corrections
+3. **Structured Response**: JSON format with corrected text and detailed explanations
+4. **Persistence**: Results stored with user association and session tracking
+
+#### Spaced Repetition Algorithm
+1. **Initial Learning**: New cards start with 1-day intervals
+2. **Performance Tracking**: User ratings (Again/Hard/Good/Easy) adjust scheduling
+3. **Ease Factor Calculation**: SM-2 algorithm optimizes review intervals
+4. **Smart Scheduling**: Cards reappear just before forgetting occurs
+
+#### Mobile Touch Support
+- **Touch Events**: Custom touch handlers for drag-and-drop on mobile
+- **Visual Feedback**: Real-time positioning and drop zone highlighting
+- **Gesture Recognition**: Distinguishes between taps, drags, and swipes
+- **Cross-Platform**: Works consistently across iOS, Android, and desktop browsers
+
+### Features in Detail
+
+#### Spaced Repetition Flashcards
+- **SM-2 Algorithm**: Scientifically proven spaced repetition scheduling
+- **Progress Tracking**: Individual card progress with ease factors and intervals
+- **Smart Scheduling**: Cards appear when you're about to forget them
+- **Statistics Dashboard**: Real-time view of due, learned, and new cards
+- **Admin Import**: Bulk import flashcards via CSV/JSON files
+
+#### Grammar Game
+- **JLPT Levels**: N5 to N1 difficulty progression
+- **Categories**: Particles, verb forms, politeness, word order, vocabulary
+- **Performance Tracking**: Session history with best streaks and accuracy
+- **LLM Explanations**: AI-powered detailed explanations for wrong answers
+
+#### Syntax Puzzle
+- **Mobile Touch Support**: Drag and drop works on mobile browsers
+- **Visual Feedback**: Particle linking with colored lines
+- **Progressive Difficulty**: From basic to complex sentence structures
+- **Instant Validation**: Real-time feedback with corrections
+
+#### Batch Processing
+- **File Support**: CSV and Excel file processing
+- **Background Jobs**: Asynchronous processing with progress tracking
+- **Bulk Corrections**: Process hundreds of sentences efficiently
+- **Download Results**: Get corrected files with explanations
+
+### Model Configuration
+- **Whisper**: Set `WHISPER_MODEL` env var (`base`, `small`, `medium`, `large`)
+- **OpenAI**: Configure via `OPENAI_MODEL_ID` (e.g., `gpt-4o-mini`, `gpt-4o`)
+- **Gemini**: Set `GEMINI_MODEL_ID` for different Gemini variants
+- **Bedrock**: Use `BEDROCK_MODEL_ID` with required inference profiles for Nova models
 
 ### Bedrock model access
 - In the AWS Console, open Amazon Bedrock and go to "Model access" to enable the models you want to use (e.g., Amazon Nova Lite, Anthropic Claude 3 Haiku). Without access, requests return `AccessDeniedException`.
@@ -138,11 +188,29 @@ python manage.py runserver
 - Browser recording saves WebM/Opus. Upload accepts common audio formats; ffmpeg handles conversion and Whisper supports standard codecs.
 
 ### Troubleshooting
-- ffmpeg not found (non-Docker): install via your OS package manager (e.g., `brew install ffmpeg`).
-- OpenAI / Bedrock errors: ensure your `.env` has a valid API key/credentials for the selected provider, and your account has access/billing enabled.
-- Postgres connection errors (non-Docker): the default `HOST='db'` only resolves inside Docker Compose. Use Docker for Postgres, or update settings for local `localhost`.
-- Whisper model download slow: first run downloads weights; subsequent runs are faster.
+- **ffmpeg not found**: Install via package manager (`brew install ffmpeg` on macOS)
+- **LLM API errors**: Verify API keys and account access/billing for chosen provider
+- **Database connection**: Use Docker for Postgres or update `HOST='localhost'` for local setup
+- **Whisper downloads**: First run downloads model weights; subsequent runs are faster
+- **Mobile touch issues**: Ensure `touch-action: none` CSS is applied to draggable elements
+- **Migration errors**: Run `docker-compose exec web python manage.py migrate` after model changes
 
-### Not production-ready
-- Do not expose with `DEBUG=True` and placeholder `SECRET_KEY`.
-- Add proper `ALLOWED_HOSTS`, HTTPS, secrets management, and a production-ready database and static/media serving if deploying.
+### Admin Features
+- **Content Management**: Import/export flashcards, grammar questions, and puzzles
+- **User Analytics**: View learning progress and session statistics
+- **Batch Job Monitoring**: Track background processing jobs
+- **File Format Support**: CSV and JSON import with validation
+
+### Mobile Optimization
+- **Touch-Friendly**: All interactions work on mobile devices
+- **Responsive Design**: Adapts to all screen sizes
+- **Swipe Gestures**: Natural mobile interactions
+- **Offline-Ready**: Core features work without constant connectivity
+
+### Production Deployment
+- Change `SECRET_KEY` and set `DEBUG=False`
+- Configure `ALLOWED_HOSTS` for your domain
+- Set up HTTPS and proper static file serving
+- Use production database with backups
+- Implement proper secrets management
+- Configure rate limiting and monitoring
