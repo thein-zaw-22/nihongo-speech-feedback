@@ -1,0 +1,11 @@
+jlpt_level,category,front,back,reading,example,is_active
+N5,vocabulary,水,water,みず,水を飲みます。,1
+N5,vocabulary,本,book,ほん,本を読みます。,1
+N5,vocabulary,学校,school,がっこう,学校に行きます。,1
+N5,vocabulary,食べる,to eat,たべる,りんごを食べます。,1
+N5,vocabulary,大きい,big,おおきい,大きい家です。,1
+N5,kanji,人,person,ひと・じん,日本人です。,1
+N5,kanji,日,day/sun,ひ・にち,今日は暑いです。,1
+N5,kanji,月,month/moon,つき・げつ,来月行きます。,1
+N5,kanji,火,fire,ひ・か,火曜日です。,1
+N5,kanji,木,tree/wood,き・もく,木が高いです。,1

@@ -1,13 +1,436 @@
 {% extends 'base.html' %}
-{% block title %}Flashcards{% endblock %}
+{% load static %}
+{% block title %}Flashcards · AI Japanese Feedback{% endblock %}
 {% block content %}
 <style>
-  .box { background: var(--bg-secondary); border:1px solid var(--border-color); border-radius:16px; padding:1rem; }
+  .flashcard-wrap { display:grid; gap:1rem; max-width:800px; margin:0 auto; padding:1rem; }
+  .flashcard-header { display:flex; align-items:center; justify-content:space-between; gap:.5rem; flex-wrap:wrap; }
+  .flashcard-title { font-weight:800; color: var(--text-primary); font-size:1.1rem; }
+  .flashcard-stats { display:flex; gap:1rem; font-size:.9rem; color: var(--text-muted); }
+  
+  .controls { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; margin-bottom:1rem; }
+  .control-group { display:flex; flex-direction:column; gap:.3rem; }
+  .control-group label { font-weight:600; font-size:.85rem; color: var(--text-secondary); }
+  .control-group select, .control-group input { padding:.5rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); }
+  
+  .card-container { perspective:1000px; height:400px; margin:2rem 0; }
+  .card { position:relative; width:100%; height:100%; transition: transform .6s; transform-style: preserve-3d; cursor:pointer; }
+  .card.flipped { transform: rotateY(180deg); }
+  .card-face { position:absolute; width:100%; height:100%; backface-visibility:hidden; border-radius:16px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:2rem; box-shadow: 0 8px 32px rgba(102,126,234,.15); }
+  .card-front { background: linear-gradient(135deg, var(--bg-primary) 0%, rgba(102,126,234,.05) 100%); border:2px solid rgba(102,126,234,.2); }
+  .card-back { background: linear-gradient(135deg, rgba(16,185,129,.05) 0%, var(--bg-primary) 100%); border:2px solid rgba(16,185,129,.2); transform: rotateY(180deg); }
+  
+  .card-content { font-size:2rem; font-weight:700; color: var(--text-primary); margin-bottom:1rem; }
+  .card-reading { font-size:1.2rem; color: var(--text-secondary); margin-bottom:.5rem; }
+  .card-example { font-size:1rem; color: var(--text-muted); font-style:italic; margin-top:1rem; }
+  .card-back .card-content { font-size:1.5rem; color: #047857; }
+  
+  .card-actions { display:flex; gap:.8rem; margin-top:2rem; justify-content:center; flex-wrap:wrap; }
+  .card-actions button { padding:.6rem 1rem; border-radius:8px; font-weight:600; border:none; cursor:pointer; transition: all .2s; font-size:.9rem; }
+  .btn-hard { background: linear-gradient(135deg, #f59e0b, #d97706); color:white; }
+  .btn-good { background: linear-gradient(135deg, #10b981, #059669); color:white; }
+  .btn-easy { background: linear-gradient(135deg, #3b82f6, #2563eb); color:white; }
+  .btn-dont-know { background: linear-gradient(135deg, #ef4444, #dc2626); color:white; }
+  .card-actions button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  
+  .progress-bar { width:100%; height:8px; background: var(--bg-secondary); border-radius:4px; overflow:hidden; margin:1rem 0; }
+  .progress-fill { height:100%; background: linear-gradient(90deg, #10b981, #34d399); transition: width .3s; }
+  
+  .game-controls { display:flex; gap:.8rem; justify-content:center; flex-wrap:wrap; }
+  .game-controls button { padding:.6rem 1.2rem; border-radius:8px; font-weight:600; border:1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); cursor:pointer; transition: all .2s; }
+  .game-controls button:hover { border-color: rgba(102,126,234,.4); background: rgba(102,126,234,.05); }
+  .game-controls .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color:white; border:none; }
+  .game-controls .btn-primary:hover { background: linear-gradient(135deg, #5a67d8, #6b46c1); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102,126,234,.3); }
+  .game-controls .btn-secondary { background: linear-gradient(135deg, #10b981, #059669); color:white; border:none; }
+  .game-controls .btn-secondary:hover { background: linear-gradient(135deg, #059669, #047857); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(16,185,129,.3); }
+  
+  .results { text-align:center; padding:2rem; background: var(--bg-secondary); border-radius:16px; margin-top:2rem; }
+  .results h3 { color: var(--text-primary); margin-bottom:1rem; }
+  .results .score { font-size:2rem; font-weight:800; color: #10b981; margin:.5rem 0; }
+  
+  .card-hint { position:absolute; top:1rem; right:1rem; font-size:.8rem; color: var(--text-muted); }
+  
+  @media (max-width: 640px) {
+    .flashcard-wrap { padding:.5rem; }
+    .controls { grid-template-columns:1fr; gap:.5rem; }
+    .card-container { height:350px; margin:1rem 0; }
+    .card-face { padding:1.5rem; }
+    .card-content { font-size:1.5rem; }
+    .card-back .card-content { font-size:1.2rem; }
+    .card-actions { gap:.5rem; }
+    .card-actions button { flex:1; padding:.5rem .8rem; font-size:.8rem; }
+    .game-controls { justify-content:stretch; }
+    .game-controls button { flex:1; }
+  }
 </style>
 
-<h1>🃏 Flashcards</h1>
-<div class="box">
-  <p>This is a placeholder for the Flashcard feature. Stay tuned!</p>
-  <p><a href="{% url 'home' %}">Back to Home</a></p>
-{% endblock %}
+<div class="flashcard-wrap" id="flashcardApp">
+  <div class="flashcard-header">
+    <div class="flashcard-title">Japanese Flashcards</div>
+    <div class="flashcard-stats">
+      <span>Card: <b id="currentCard">0</b>/<b id="totalCards">0</b></span>
+      <span>Score: <b id="score">0</b>/<b id="attempted">0</b></span>
+      <span>Time: <b id="timer">00:00</b></span>
+    </div>
+  </div>
 
+  <div class="controls" id="setupControls">
+    <div class="control-group">
+      <label for="levelSelect">JLPT Level</label>
+      <select id="levelSelect">
+        <option value="N5">N5 (Beginner)</option>
+        <option value="N4">N4</option>
+        <option value="N3">N3</option>
+        <option value="N2">N2</option>
+        <option value="N1">N1 (Advanced)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label for="categorySelect">Category</label>
+      <select id="categorySelect">
+        <option value="vocabulary">Vocabulary</option>
+        <option value="kanji">Kanji</option>
+        <option value="grammar">Grammar</option>
+        <option value="phrases">Phrases</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="srs-stats" id="srsStats" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.8rem; margin:1rem 0; font-size:.9rem;">
+    <div style="text-align:center; padding:.8rem; background:var(--bg-secondary); border-radius:12px; border:2px solid rgba(239,68,68,.2);">
+      <div style="font-weight:800; color:#ef4444; font-size:1.5rem;" id="dueCount">0</div>
+      <div style="color:var(--text-muted); font-weight:600;">Due Now</div>
+    </div>
+    <div style="text-align:center; padding:.8rem; background:var(--bg-secondary); border-radius:12px; border:2px solid rgba(16,185,129,.2);">
+      <div style="font-weight:800; color:#10b981; font-size:1.5rem;" id="learnedCount">0</div>
+      <div style="color:var(--text-muted); font-weight:600;">Learned</div>
+    </div>
+    <div style="text-align:center; padding:.8rem; background:var(--bg-secondary); border-radius:12px; border:2px solid rgba(59,130,246,.2);">
+      <div style="font-weight:800; color:#3b82f6; font-size:1.5rem;" id="newCount">0</div>
+      <div style="color:var(--text-muted); font-weight:600;">New</div>
+    </div>
+  </div>
+
+  <div class="progress-bar" id="progressBar" style="display:none;">
+    <div class="progress-fill" id="progressFill" style="width:0%"></div>
+  </div>
+
+  <div class="card-container" id="cardContainer" style="display:none;">
+    <div class="card" id="flashcard">
+      <div class="card-face card-front">
+        <div class="card-hint">Click to flip</div>
+        <div class="card-content" id="cardFront"></div>
+        <div class="card-reading" id="cardReading"></div>
+      </div>
+      <div class="card-face card-back">
+        <div class="card-content" id="cardBack"></div>
+        <div class="card-example" id="cardExample"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-actions" id="cardActions" style="display:none;">
+    <button class="btn-dont-know" id="againBtn" data-quality="1">Again</button>
+    <button class="btn-hard" id="hardBtn" data-quality="3">Hard</button>
+    <button class="btn-good" id="goodBtn" data-quality="4">Good</button>
+    <button class="btn-easy" id="easyBtn" data-quality="5">Easy</button>
+  </div>
+
+  <div class="game-controls">
+    <button id="reviewBtn" class="btn-primary">Review Due Cards</button>
+    <button id="newBtn" class="btn-secondary">Learn New Cards</button>
+    <button id="resetBtn" style="display:none;">Reset</button>
+  </div>
+
+  <div class="results" id="results" style="display:none;">
+    <h3>Practice Complete!</h3>
+    <div class="score" id="finalScore"></div>
+    <div id="finalStats"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let cards = [], currentIndex = 0, score = 0, attempted = 0, startTime = 0, timerId = null;
+  let isFlipped = false, currentMode = 'review', cardResults = [];
+  
+  const elements = {
+    setupControls: document.getElementById('setupControls'),
+    cardContainer: document.getElementById('cardContainer'),
+    cardActions: document.getElementById('cardActions'),
+    progressBar: document.getElementById('progressBar'),
+    results: document.getElementById('results'),
+    flashcard: document.getElementById('flashcard'),
+    cardFront: document.getElementById('cardFront'),
+    cardReading: document.getElementById('cardReading'),
+    cardBack: document.getElementById('cardBack'),
+    cardExample: document.getElementById('cardExample'),
+    currentCard: document.getElementById('currentCard'),
+    totalCards: document.getElementById('totalCards'),
+    score: document.getElementById('score'),
+    attempted: document.getElementById('attempted'),
+    timer: document.getElementById('timer'),
+    progressFill: document.getElementById('progressFill'),
+    resetBtn: document.getElementById('resetBtn'),
+    reviewBtn: document.getElementById('reviewBtn'),
+    newBtn: document.getElementById('newBtn'),
+    againBtn: document.getElementById('againBtn'),
+    hardBtn: document.getElementById('hardBtn'),
+    goodBtn: document.getElementById('goodBtn'),
+    easyBtn: document.getElementById('easyBtn'),
+    srsStats: document.getElementById('srsStats'),
+    dueCount: document.getElementById('dueCount'),
+    learnedCount: document.getElementById('learnedCount'),
+    newCount: document.getElementById('newCount'),
+    levelSelect: document.getElementById('levelSelect'),
+    categorySelect: document.getElementById('categorySelect'),
+    finalScore: document.getElementById('finalScore'),
+    finalStats: document.getElementById('finalStats')
+  };
+
+  function formatTime(seconds) {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function updateTimer() {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    elements.timer.textContent = formatTime(elapsed);
+  }
+
+  function startTimer() {
+    startTime = Date.now();
+    timerId = setInterval(updateTimer, 1000);
+    updateTimer();
+  }
+
+  function stopTimer() {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function updateProgress() {
+    const progress = cards.length > 0 ? (currentIndex / cards.length) * 100 : 0;
+    elements.progressFill.style.width = `${progress}%`;
+    elements.currentCard.textContent = currentIndex + 1;
+    elements.totalCards.textContent = cards.length;
+    elements.score.textContent = score;
+    elements.attempted.textContent = attempted;
+  }
+
+  function showCard() {
+    if (currentIndex >= cards.length) {
+      endGame();
+      return;
+    }
+
+    const card = cards[currentIndex];
+    elements.cardFront.textContent = card.front;
+    elements.cardReading.textContent = card.reading || '';
+    elements.cardBack.textContent = card.back;
+    elements.cardExample.textContent = card.example || '';
+    
+    // Reset flip state
+    isFlipped = false;
+    elements.flashcard.classList.remove('flipped');
+    
+    updateProgress();
+  }
+
+  function flipCard() {
+    isFlipped = !isFlipped;
+    elements.flashcard.classList.toggle('flipped');
+    
+    if (isFlipped) {
+      elements.cardActions.style.display = 'flex';
+    }
+  }
+
+  function nextCard(quality) {
+    attempted++;
+    if (quality >= 3) score++;
+    
+    // Record result for spaced repetition
+    const card = cards[currentIndex];
+    cardResults.push({
+      card_id: card.id,
+      quality: quality
+    });
+    
+    currentIndex++;
+    elements.cardActions.style.display = 'none';
+    
+    setTimeout(() => {
+      showCard();
+    }, 300);
+  }
+
+  function endGame() {
+    stopTimer();
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    const percentage = attempted > 0 ? Math.round((score / attempted) * 100) : 0;
+    
+    elements.cardContainer.style.display = 'none';
+    elements.cardActions.style.display = 'none';
+    elements.progressBar.style.display = 'none';
+    elements.results.style.display = 'block';
+    elements.resetBtn.style.display = 'inline-block';
+    
+    elements.finalScore.textContent = `${score}/${attempted} (${percentage}%)`;
+    elements.finalStats.innerHTML = `
+      <div>Time: ${formatTime(duration)}</div>
+      <div>Level: ${elements.levelSelect.value} ${elements.categorySelect.value}</div>
+    `;
+
+    // Save session
+    saveSession(duration);
+  }
+
+  async function saveSession(duration) {
+    try {
+      const payload = {
+        level: elements.levelSelect.value,
+        category: elements.categorySelect.value,
+        total: attempted,
+        correct: score,
+        duration: duration,
+        results: cardResults
+      };
+      
+      await fetch('/flashcard/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.log('Failed to save session:', e);
+    }
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+
+  async function startGame(mode = 'review') {
+    const level = elements.levelSelect.value;
+    const category = elements.categorySelect.value;
+    currentMode = mode;
+    
+    try {
+      const response = await fetch(`/flashcard/play?level=${level}&category=${category}&mode=${mode}&n=10`);
+      const data = await response.json();
+      
+      if (!data.items || data.items.length === 0) {
+        alert(`No ${mode === 'new' ? 'new' : 'due'} flashcards available for this level/category.`);
+        return;
+      }
+      
+      cards = data.items;
+      currentIndex = 0;
+      score = 0;
+      attempted = 0;
+      cardResults = [];
+      
+      elements.setupControls.style.display = 'none';
+      elements.srsStats.style.display = 'none';
+      elements.cardContainer.style.display = 'block';
+      elements.progressBar.style.display = 'block';
+      elements.results.style.display = 'none';
+      elements.reviewBtn.style.display = 'none';
+      elements.newBtn.style.display = 'none';
+      elements.resetBtn.style.display = 'inline-block';
+      
+      startTimer();
+      showCard();
+      
+    } catch (e) {
+      alert('Failed to load flashcards. Please try again.');
+    }
+  }
+  
+  async function loadStats() {
+    const level = elements.levelSelect.value;
+    const category = elements.categorySelect.value;
+    
+    try {
+      const response = await fetch(`/flashcard/stats?level=${level}&category=${category}`);
+      const data = await response.json();
+      
+      elements.dueCount.textContent = data.due_count;
+      elements.learnedCount.textContent = data.total_learned;
+      elements.newCount.textContent = data.new_count;
+      
+    } catch (e) {
+      console.log('Failed to load stats:', e);
+    }
+  }
+
+  function resetGame() {
+    stopTimer();
+    currentIndex = 0;
+    score = 0;
+    attempted = 0;
+    isFlipped = false;
+    
+    elements.setupControls.style.display = 'grid';
+    elements.srsStats.style.display = 'grid';
+    elements.cardContainer.style.display = 'none';
+    elements.cardActions.style.display = 'none';
+    elements.progressBar.style.display = 'none';
+    elements.results.style.display = 'none';
+    elements.reviewBtn.style.display = 'inline-block';
+    elements.newBtn.style.display = 'inline-block';
+    elements.resetBtn.style.display = 'none';
+    elements.flashcard.classList.remove('flipped');
+    
+    elements.timer.textContent = '00:00';
+    updateProgress();
+    loadStats();
+  }
+
+  // Event listeners
+  elements.reviewBtn.addEventListener('click', () => startGame('review'));
+  elements.newBtn.addEventListener('click', () => startGame('new'));
+  elements.resetBtn.addEventListener('click', resetGame);
+  elements.flashcard.addEventListener('click', flipCard);
+  elements.againBtn.addEventListener('click', () => nextCard(1));
+  elements.hardBtn.addEventListener('click', () => nextCard(3));
+  elements.goodBtn.addEventListener('click', () => nextCard(4));
+  elements.easyBtn.addEventListener('click', () => nextCard(5));
+  elements.levelSelect.addEventListener('change', loadStats);
+  elements.categorySelect.addEventListener('change', loadStats);
+
+  // Keyboard support
+  document.addEventListener('keydown', (e) => {
+    if (elements.cardContainer.style.display === 'block') {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (!isFlipped) {
+          flipCard();
+        }
+      } else if (e.key === '1' && isFlipped) {
+        nextCard(1); // Again
+      } else if (e.key === '2' && isFlipped) {
+        nextCard(3); // Hard
+      } else if (e.key === '3' && isFlipped) {
+        nextCard(4); // Good
+      } else if (e.key === '4' && isFlipped) {
+        nextCard(5); // Easy
+      }
+    }
+  });
+
+  // Initialize
+  updateProgress();
+  loadStats();
+})();
+</script>
+{% endblock %}

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from django.views.generic import RedirectView
-from core.views import home, index, signup, feedback, history, flashcard, pronunciation, grammar_game, grammar_play, grammar_submit, grammar_explain, grammar_history, profile, password_update, batch_correct, batch_create, batch_status, batch_download, batch_cancel, batch_history, batch_correction, puzzle, puzzle_data
+from core.views import home, index, signup, feedback, history, flashcard, flashcard_play, flashcard_submit, flashcard_stats, pronunciation, grammar_game, grammar_play, grammar_submit, grammar_explain, grammar_history, profile, password_update, batch_correct, batch_create, batch_status, batch_download, batch_cancel, batch_history, batch_correction, puzzle, puzzle_data
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -22,6 +22,9 @@ urlpatterns = [
     path('feedback/<int:pk>/', feedback, name='feedback'),
     path('history/', history, name='history'),
     path('flashcard/', flashcard, name='flashcard'),
+    path('flashcard/play', flashcard_play, name='flashcard_play'),
+    path('flashcard/submit', flashcard_submit, name='flashcard_submit'),
+    path('flashcard/stats', flashcard_stats, name='flashcard_stats'),
     path('pronunciation/', pronunciation, name='pronunciation'),
     path('grammar-game/', grammar_game, name='grammar_game'),
     path('grammar-game/play', grammar_play, name='grammar_play'),

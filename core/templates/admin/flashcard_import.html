@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Import Flashcards{% endblock %}
+
+{% block content %}
+<h1>Import Flashcards</h1>
+
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="form-row">
+    <div>
+      <label for="file">Choose CSV or JSON file:</label>
+      <input type="file" name="file" id="file" accept=".csv,.json" required>
+    </div>
+  </div>
+  <div class="submit-row">
+    <input type="submit" value="Import" class="default">
+    <a href="../" class="button cancel-link">Cancel</a>
+  </div>
+</form>
+
+<div class="help">
+  <h3>CSV Format:</h3>
+  <p>Required columns: <code>front</code>, <code>back</code></p>
+  <p>Optional columns: <code>jlpt_level</code>, <code>category</code>, <code>reading</code>, <code>example</code>, <code>is_active</code></p>
+  
+  <h3>JSON Format:</h3>
+  <pre>[
+  {
+    "jlpt_level": "N5",
+    "category": "vocabulary", 
+    "front": "水",
+    "back": "water",
+    "reading": "みず",
+    "example": "水を飲みます。",
+    "is_active": true
+  }
+]</pre>
+
+  <h3>Categories:</h3>
+  <ul>
+    <li>vocabulary</li>
+    <li>kanji</li>
+    <li>grammar</li>
+    <li>phrases</li>
+  </ul>
+</div>
+{% endblock %}

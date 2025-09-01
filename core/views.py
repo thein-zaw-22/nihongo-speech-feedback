@@ -26,7 +26,7 @@ import io
 import csv
 from .models import Transcription
 from .models import GrammarQuestion, GrammarChoice, GrammarGameSession
-from .models import BatchJob, Puzzle
+from .models import BatchJob, Puzzle, Flashcard, FlashcardSession, FlashcardProgress
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -532,8 +532,192 @@ def history(request):
 
 @login_required
 def flashcard(request):
-    # Placeholder page for Flashcard feature
     return render(request, 'flashcard.html')
+
+
+@login_required
+def flashcard_play(request):
+    # Returns JSON set of flashcards for selected level/category with spaced repetition
+    level = request.GET.get('level', 'N5')
+    category = request.GET.get('category', 'vocabulary')
+    mode = request.GET.get('mode', 'review')  # 'review' or 'new'
+    try:
+        n = max(1, min(int(request.GET.get('n', '10')), 50))
+    except Exception:
+        n = 10
+    
+    from .models import Flashcard, FlashcardProgress
+    
+    if mode == 'review':
+        # Get cards due for review
+        due_progress = FlashcardProgress.objects.filter(
+            user=request.user,
+            flashcard__jlpt_level=level,
+            flashcard__category=category,
+            flashcard__is_active=True,
+            next_review__lte=timezone.now()
+        ).select_related('flashcard')[:n]
+        
+        items = [{
+            'id': p.flashcard.id,
+            'front': p.flashcard.front,
+            'back': p.flashcard.back,
+            'reading': p.flashcard.reading,
+            'example': p.flashcard.example,
+            'interval': p.interval,
+            'repetitions': p.repetitions,
+        } for p in due_progress]
+        
+        # If not enough due cards, add new ones
+        if len(items) < n:
+            learned_ids = FlashcardProgress.objects.filter(
+                user=request.user,
+                flashcard__jlpt_level=level,
+                flashcard__category=category
+            ).values_list('flashcard_id', flat=True)
+            
+            new_cards = Flashcard.objects.filter(
+                jlpt_level=level,
+                category=category,
+                is_active=True
+            ).exclude(id__in=learned_ids)[:n - len(items)]
+            
+            for card in new_cards:
+                items.append({
+                    'id': card.id,
+                    'front': card.front,
+                    'back': card.back,
+                    'reading': card.reading,
+                    'example': card.example,
+                    'interval': 0,
+                    'repetitions': 0,
+                })
+    else:
+        # Get new cards only
+        learned_ids = FlashcardProgress.objects.filter(
+            user=request.user,
+            flashcard__jlpt_level=level,
+            flashcard__category=category
+        ).values_list('flashcard_id', flat=True)
+        
+        new_cards = Flashcard.objects.filter(
+            jlpt_level=level,
+            category=category,
+            is_active=True
+        ).exclude(id__in=learned_ids)[:n]
+        
+        items = [{
+            'id': card.id,
+            'front': card.front,
+            'back': card.back,
+            'reading': card.reading,
+            'example': card.example,
+            'interval': 0,
+            'repetitions': 0,
+        } for card in new_cards]
+    
+    # Fallback to demo data if no cards available
+    if not items:
+        demo_cards = {
+            'N5': {
+                'vocabulary': [
+                    {'front': '水', 'back': 'water', 'reading': 'みず', 'example': '水を飲みます。'},
+                    {'front': '本', 'back': 'book', 'reading': 'ほん', 'example': '本を読みます。'},
+                    {'front': '学校', 'back': 'school', 'reading': 'がっこう', 'example': '学校に行きます。'},
+                    {'front': '食べる', 'back': 'to eat', 'reading': 'たべる', 'example': 'りんごを食べます。'},
+                    {'front': '大きい', 'back': 'big', 'reading': 'おおきい', 'example': '大きい家です。'},
+                ],
+                'kanji': [
+                    {'front': '人', 'back': 'person', 'reading': 'ひと・じん', 'example': '日本人です。'},
+                    {'front': '日', 'back': 'day, sun', 'reading': 'ひ・にち', 'example': '今日は暑いです。'},
+                    {'front': '月', 'back': 'month, moon', 'reading': 'つき・げつ', 'example': '来月行きます。'},
+                ]
+            }
+        }
+        cards_data = demo_cards.get(level, {}).get(category, [])
+        items = [{'id': f'demo_{i}', 'interval': 0, 'repetitions': 0, **card} for i, card in enumerate(cards_data[:n])]
+    
+    return JsonResponse({'items': items})
+
+
+@login_required
+def flashcard_submit(request):
+    # Save session results and update spaced repetition progress
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        level = payload.get('level', 'N5')
+        category = payload.get('category', 'vocabulary')
+        total = int(payload.get('total', 0))
+        correct = int(payload.get('correct', 0))
+        duration = int(payload.get('duration', 0))
+        results = payload.get('results', [])  # [{card_id, quality}]
+        
+        from .models import FlashcardSession, FlashcardProgress, Flashcard
+        
+        # Save session
+        FlashcardSession.objects.create(
+            user=request.user,
+            jlpt_level=level,
+            category=category,
+            total_cards=total,
+            correct=correct,
+            duration_seconds=duration,
+        )
+        
+        # Update spaced repetition progress
+        for result in results:
+            card_id = result.get('card_id')
+            quality = int(result.get('quality', 3))  # 0-5 scale
+            
+            if str(card_id).startswith('demo_'):
+                continue  # Skip demo cards
+                
+            try:
+                flashcard = Flashcard.objects.get(id=card_id)
+                progress, created = FlashcardProgress.objects.get_or_create(
+                    user=request.user,
+                    flashcard=flashcard
+                )
+                progress.update_progress(quality)
+            except Flashcard.DoesNotExist:
+                continue
+        
+        return JsonResponse({'ok': True})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+def flashcard_stats(request):
+    # Get user's spaced repetition statistics
+    from .models import FlashcardProgress
+    
+    level = request.GET.get('level', 'N5')
+    category = request.GET.get('category', 'vocabulary')
+    
+    progress_qs = FlashcardProgress.objects.filter(
+        user=request.user,
+        flashcard__jlpt_level=level,
+        flashcard__category=category,
+        flashcard__is_active=True
+    )
+    
+    due_count = progress_qs.filter(next_review__lte=timezone.now()).count()
+    total_learned = progress_qs.count()
+    
+    from .models import Flashcard
+    total_available = Flashcard.objects.filter(
+        jlpt_level=level,
+        category=category,
+        is_active=True
+    ).count()
+    
+    return JsonResponse({
+        'due_count': due_count,
+        'total_learned': total_learned,
+        'total_available': total_available,
+        'new_count': total_available - total_learned
+    })
 
 
 @login_required
