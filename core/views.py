@@ -36,6 +36,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 logger.info("Using LLM provider: %s", LLM_PROVIDER)
 
 # Model configurations
+OPENAI_MODEL_ID = os.getenv("OPENAI_MODEL_ID", "gpt-4o-mini")
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.amazon.nova-lite-v1:0")
 GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.5-flash-lite")
 
@@ -225,7 +226,7 @@ def transcribe_audio(uploaded_file):
 def get_openai_feedback(transcript_text):
     """Gets feedback from OpenAI's GPT model."""
     client = get_client("openai")
-    model_name = "gpt-4o-mini"
+    model_name = OPENAI_MODEL_ID
     _rpm_limiter.wait(_rpm_key('openai', model_name))
     messages = [
         {"role": "system", "content": (
@@ -628,9 +629,9 @@ def grammar_explain(request):
         try:
             if provider == 'openai':
                 client = get_client('openai')
-                _rpm_limiter.wait(_rpm_key('openai', 'gpt-4o-mini'))
+                _rpm_limiter.wait(_rpm_key('openai', OPENAI_MODEL_ID))
                 resp = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=OPENAI_MODEL_ID,
                     messages=[{"role":"system","content":system},{"role":"user","content":user}]
                 )
                 raw = resp.choices[0].message.content
