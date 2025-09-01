@@ -2,49 +2,63 @@
 {% block title %}Batch History{% endblock %}
 {% block content %}
 <style>
-  .bh-controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.6rem; }
-  .bh-controls label { font-size: inherit; color: var(--text-primary); }
-  .bh-controls input, .bh-controls select { padding:.5rem .7rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); font-size: inherit; }
+  .bh-controls { display:flex; gap:.5rem; align-items:end; flex-wrap:wrap; margin-bottom:.75rem; }
+  .bh-controls .field { display:flex; flex-direction:column; gap:.25rem; }
+  .bh-controls .field label { font-size:.85rem; color: var(--text-secondary); font-weight:600; }
+  .bh-controls input, .bh-controls select { padding:.5rem .6rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); }
   .bh-table { width:100%; border-collapse: collapse; font-size: .85rem; }
   /* Draw row separators on the <tr> so empty cells (like Actions) don't break the line */
   .bh-table tr { border-bottom: 1px solid var(--border-color); }
   .bh-table th, .bh-table td { padding:.4rem .5rem; border-bottom: none; }
-  .bh-pager { display:flex; gap:.35rem; align-items:center; justify-content:flex-end; margin-top:.6rem; }
+  .bh-pager { display:flex; gap:.35rem; align-items:center; justify-content:center; margin-top:1rem; flex-wrap:wrap; }
   /* Mobile enhancements */
   @media (max-width: 720px){
     .bh-controls { flex-direction: column; align-items: stretch; }
-    .bh-controls > * { width: 100%; }
-    .bh-controls .btn { width: auto; }
+    .bh-controls .field { width: 100%; }
+    .bh-controls .field > div { justify-content: center; }
     .bh-table { border-collapse: separate; border-spacing: 0; font-size: .92rem; }
     .bh-table thead { display: none; }
     .bh-table tr { display: block; border: 1px solid var(--border-color); border-radius: 12px; padding: .6rem .7rem; margin-bottom: .6rem; }
     .bh-table td { display: flex; justify-content: space-between; align-items: baseline; gap:.75rem; padding: .35rem 0; }
     .bh-table td::before { content: attr(data-label); color: var(--text-muted); font-weight: 600; }
     .bh-table td[data-label='File'] { word-break: break-word; }
-    /* keep full border including bottom */
-    .bh-pager { justify-content: center; flex-wrap: wrap; }
+    .bh-pager { justify-content: center !important; }
   }
 </style>
 
 <h1 style="font-size:1.1rem; margin-bottom:.4rem;">Batch Jobs</h1>
 
-<form method="get" class="bh-controls">
-  <label>From <input type="date" name="start" value="{{ start }}"></label>
-  <label>To <input type="date" name="end" value="{{ end }}"></label>
-  <label>Page size
-    <select name="page_size" class="select" style="padding:.35rem .5rem; border:1px solid var(--border-color); border-radius:6px; background: var(--bg-primary); color: var(--text-primary);">
+<form method="get" class="bh-controls" role="search" aria-label="Filter by date">
+  <div class="field">
+    <label for="start">From</label>
+    <input id="start" type="date" name="start" value="{{ start }}">
+  </div>
+  <div class="field">
+    <label for="end">To</label>
+    <input id="end" type="date" name="end" value="{{ end }}">
+  </div>
+  <div class="field">
+    <label for="page_size">Page size</label>
+    <select id="page_size" name="page_size" style="padding:.35rem .5rem;">
       <option value="10" {% if page_size == 10 %}selected{% endif %}>10</option>
       <option value="25" {% if page_size == 25 %}selected{% endif %}>25</option>
       <option value="50" {% if page_size == 50 %}selected{% endif %}>50</option>
       <option value="100" {% if page_size == 100 %}selected{% endif %}>100</option>
     </select>
-  </label>
-  <button class="btn btn-primary" type="submit">Filter</button>
-  <a class="btn btn-secondary" href="{% url 'batch_history' %}">Clear</a>
-  <span style="margin-left:auto;"></span>
+  </div>
+  <div class="field" style="gap:.4rem;">
+    <label style="visibility:hidden;">Apply</label>
+    <div style="display:flex; gap:.5rem;">
+      <button class="btn btn-primary" type="submit">Filter</button>
+      <a class="btn btn-secondary" href="{% url 'batch_history' %}">Clear</a>
+    </div>
+  </div>
+</form>
+
+<div style="display:flex; gap:.5rem; margin-bottom:.75rem; flex-wrap:wrap; justify-content:flex-end;">
   <a class="btn btn-secondary" href="{% url 'batch_correction' %}">Back to Batch Correction</a>
   <a class="btn btn-secondary" href="{% url 'batch_history' %}">Refresh</a>
-</form>
+</div>
 
 <div style="overflow:auto;">
   <table class="bh-table">
@@ -101,8 +115,5 @@
   {% endif %}
 </div>
 
-<div style="margin-top:1rem;">
-  <a class="btn btn-secondary" href="{% url 'batch_correction' %}">Back to Batch Correction</a>
-  <a class="btn btn-secondary" href="{% url 'batch_history' %}">Refresh</a>
-</div>
+
 {% endblock %}

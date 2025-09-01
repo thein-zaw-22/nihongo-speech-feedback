@@ -505,7 +505,28 @@ def history(request):
             items = items.filter(created_at__gte=start_dt)
         if end_dt:
             items = items.filter(created_at__lte=end_dt)
-    return render(request, 'history.html', {'items': items, 'start': start_str, 'end': end_str})
+    
+    # Pagination with selectable page size
+    page_num = request.GET.get('page') or '1'
+    try:
+        page_num = int(page_num)
+    except Exception:
+        page_num = 1
+    # page_size: default 10, max 100
+    page_size = request.GET.get('page_size') or '10'
+    try:
+        page_size = max(1, min(int(page_size), 100))
+    except Exception:
+        page_size = 10
+    paginator = Paginator(items, page_size)
+    page_obj = paginator.get_page(page_num)
+    return render(request, 'history.html', {
+        'items': page_obj.object_list,
+        'page_obj': page_obj,
+        'start': start_str or '',
+        'end': end_str or '',
+        'page_size': page_size,
+    })
 
 
 @login_required

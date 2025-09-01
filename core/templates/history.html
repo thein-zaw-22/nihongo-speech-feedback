@@ -13,6 +13,12 @@
   .history-page .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color:#fff; }
   .history-page .btn-secondary { background: rgba(102,126,234,.1); color: var(--brand); border: 1px solid rgba(102,126,234,.25); }
   .filter { display:flex; gap:.5rem; align-items:end; margin-bottom:.75rem; flex-wrap: wrap; }
+  @media (max-width: 640px) {
+    .filter { flex-direction: column; align-items: stretch; }
+    .filter .field { width: 100%; }
+    .filter .field > div { justify-content: center; }
+    .pagination { justify-content: center !important; }
+  }
   .field { display:flex; flex-direction:column; gap:.25rem; }
   .field label { font-size:.85rem; color: var(--text-secondary); font-weight:600; }
   .input { padding:.5rem .6rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); }
@@ -28,6 +34,15 @@
   <div class="field">
     <label for="end">To</label>
     <input id="end" class="input" type="date" name="end" value="{{ end|default_if_none:'' }}">
+  </div>
+  <div class="field">
+    <label for="page_size">Page size</label>
+    <select id="page_size" name="page_size" class="input" style="padding:.35rem .5rem;">
+      <option value="10" {% if page_size == 10 %}selected{% endif %}>10</option>
+      <option value="25" {% if page_size == 25 %}selected{% endif %}>25</option>
+      <option value="50" {% if page_size == 50 %}selected{% endif %}>50</option>
+      <option value="100" {% if page_size == 100 %}selected{% endif %}>100</option>
+    </select>
   </div>
   <div class="field" style="gap:.4rem;">
     <label style="visibility:hidden;">Apply</label>
@@ -68,5 +83,17 @@
 {% else %}
   <div class="item">No history yet. Submit your first feedback!</div>
 {% endif %}
+</div>
+
+<div class="pagination" style="display:flex; gap:.35rem; align-items:center; justify-content:center; margin-top:1rem; flex-wrap:wrap;">
+  {% if page_obj and page_obj.has_previous %}
+    <a class="btn btn-secondary" href="?page={{ page_obj.previous_page_number }}&page_size={{ page_size }}{% if start %}&start={{ start }}{% endif %}{% if end %}&end={{ end }}{% endif %}">Prev</a>
+  {% endif %}
+  {% if page_obj %}
+    <span class="btn btn-secondary" aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% endif %}
+  {% if page_obj and page_obj.has_next %}
+    <a class="btn btn-secondary" href="?page={{ page_obj.next_page_number }}&page_size={{ page_size }}{% if start %}&start={{ start }}{% endif %}{% if end %}&end={{ end }}{% endif %}">Next</a>
+  {% endif %}
 </div>
 {% endblock %}
