@@ -1,32 +1,76 @@
 {% extends 'base.html' %}
 {% block title %}Batch History{% endblock %}
 {% block content %}
-<h1 style="font-size:1.25rem; margin-bottom:1rem;">Batch Jobs</h1>
+<style>
+  .bh-controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.6rem; }
+  .bh-controls label { font-size: inherit; color: var(--text-primary); }
+  .bh-controls input, .bh-controls select { padding:.5rem .7rem; border:1px solid var(--border-color); border-radius:8px; background: var(--bg-primary); color: var(--text-primary); font-size: inherit; }
+  .bh-table { width:100%; border-collapse: collapse; font-size: .85rem; }
+  /* Draw row separators on the <tr> so empty cells (like Actions) don't break the line */
+  .bh-table tr { border-bottom: 1px solid var(--border-color); }
+  .bh-table th, .bh-table td { padding:.4rem .5rem; border-bottom: none; }
+  .bh-pager { display:flex; gap:.35rem; align-items:center; justify-content:flex-end; margin-top:.6rem; }
+  /* Mobile enhancements */
+  @media (max-width: 720px){
+    .bh-controls { flex-direction: column; align-items: stretch; }
+    .bh-controls > * { width: 100%; }
+    .bh-controls .btn { width: auto; }
+    .bh-table { border-collapse: separate; border-spacing: 0; font-size: .92rem; }
+    .bh-table thead { display: none; }
+    .bh-table tr { display: block; border: 1px solid var(--border-color); border-radius: 12px; padding: .6rem .7rem; margin-bottom: .6rem; }
+    .bh-table td { display: flex; justify-content: space-between; align-items: baseline; gap:.75rem; padding: .35rem 0; }
+    .bh-table td::before { content: attr(data-label); color: var(--text-muted); font-weight: 600; }
+    .bh-table td[data-label='File'] { word-break: break-word; }
+    /* keep full border including bottom */
+    .bh-pager { justify-content: center; flex-wrap: wrap; }
+  }
+</style>
+
+<h1 style="font-size:1.1rem; margin-bottom:.4rem;">Batch Jobs</h1>
+
+<form method="get" class="bh-controls">
+  <label>From <input type="date" name="start" value="{{ start }}"></label>
+  <label>To <input type="date" name="end" value="{{ end }}"></label>
+  <label>Page size
+    <select name="page_size" class="select" style="padding:.35rem .5rem; border:1px solid var(--border-color); border-radius:6px; background: var(--bg-primary); color: var(--text-primary);">
+      <option value="10" {% if page_size == 10 %}selected{% endif %}>10</option>
+      <option value="25" {% if page_size == 25 %}selected{% endif %}>25</option>
+      <option value="50" {% if page_size == 50 %}selected{% endif %}>50</option>
+      <option value="100" {% if page_size == 100 %}selected{% endif %}>100</option>
+    </select>
+  </label>
+  <button class="btn btn-primary" type="submit">Filter</button>
+  <a class="btn btn-secondary" href="{% url 'batch_history' %}">Clear</a>
+  <span style="margin-left:auto;"></span>
+  <a class="btn btn-secondary" href="{% url 'batch_correction' %}">Back to Batch Correction</a>
+  <a class="btn btn-secondary" href="{% url 'batch_history' %}">Refresh</a>
+</form>
+
 <div style="overflow:auto;">
-  <table style="width:100%; border-collapse: collapse;">
+  <table class="bh-table">
     <thead>
-      <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
-        <th style="padding:.5rem;">ID</th>
-        <th style="padding:.5rem;">File</th>
-        <th style="padding:.5rem;">Provider</th>
-        <th style="padding:.5rem;">Status</th>
-        <th style="padding:.5rem;">Progress</th>
-        <th style="padding:.5rem;">Created</th>
-        <th style="padding:.5rem;">Updated</th>
-        <th style="padding:.5rem;">Actions</th>
+      <tr>
+        <th>ID</th>
+        <th>File</th>
+        <th>Provider</th>
+        <th>Status</th>
+        <th>Progress</th>
+        <th>Created</th>
+        <th>Updated</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for j in jobs %}
-      <tr style="border-bottom:1px solid var(--border-color);">
-        <td style="padding:.5rem;">{{ j.id }}</td>
-        <td style="padding:.5rem;">{{ j.input_file.name|cut:"batch/" }}</td>
-        <td style="padding:.5rem;">{{ j.provider }}</td>
-        <td style="padding:.5rem;{% if j.status == 'canceled' %} color:#b91c1c; font-weight:700;{% endif %}">{{ j.status|title }}</td>
-        <td style="padding:.5rem;">{{ j.processed_rows }}/{{ j.total_rows }} ({{ j.progress_percent }}%)</td>
-        <td style="padding:.5rem;">{{ j.created_at|date:"Y-m-d H:i" }}</td>
-        <td style="padding:.5rem;">{{ j.updated_at|date:"Y-m-d H:i" }}</td>
-        <td style="padding:.5rem; display:flex; gap:.4rem;">
+      <tr>
+        <td data-label="ID">{{ j.id }}</td>
+        <td data-label="File">{{ j.input_file.name|cut:"batch/" }}</td>
+        <td data-label="Provider">{{ j.provider }}</td>
+        <td data-label="Status"{% if j.status == 'canceled' %} style="color:#b91c1c; font-weight:700;"{% endif %}>{{ j.status|title }}</td>
+        <td data-label="Progress">{{ j.processed_rows }}/{{ j.total_rows }} ({{ j.progress_percent }}%)</td>
+        <td data-label="Created">{{ j.created_at|date:"Y-m-d H:i" }}</td>
+        <td data-label="Updated">{{ j.updated_at|date:"Y-m-d H:i" }}</td>
+        <td data-label="Actions" style="display:flex; gap:.35rem; flex-wrap: wrap;">
           {% if j.status == 'done' and j.output_file %}
             <a class="btn btn-secondary" href="{% url 'batch_download' j.id %}">Download</a>
           {% endif %}
@@ -45,9 +89,20 @@
   </table>
 </div>
 
+<div class="bh-pager index-page">
+  {% if page_obj and page_obj.has_previous %}
+    <a class="btn btn-secondary" href="?page={{ page_obj.previous_page_number }}&page_size={{ page_size }}{% if start %}&start={{ start }}{% endif %}{% if end %}&end={{ end }}{% endif %}">Prev</a>
+  {% endif %}
+  {% if page_obj %}
+    <span class="btn btn-secondary" aria-current="page">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% endif %}
+  {% if page_obj and page_obj.has_next %}
+    <a class="btn btn-secondary" href="?page={{ page_obj.next_page_number }}&page_size={{ page_size }}{% if start %}&start={{ start }}{% endif %}{% if end %}&end={{ end }}{% endif %}">Next</a>
+  {% endif %}
+</div>
+
 <div style="margin-top:1rem;">
-  <a class="btn btn-secondary" href="{% url 'index' %}">Back to Speak-AI</a>
+  <a class="btn btn-secondary" href="{% url 'batch_correction' %}">Back to Batch Correction</a>
   <a class="btn btn-secondary" href="{% url 'batch_history' %}">Refresh</a>
-  
 </div>
 {% endblock %}

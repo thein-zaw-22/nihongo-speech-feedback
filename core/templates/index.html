@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}AI Japanese Feedback{% endblock %}
+{% block title %}Speak AI{% endblock %}
 {% block content %}
 <style>
   /* Compact page layout to avoid scrolling */
@@ -8,7 +8,13 @@
   .section:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
   .section h3 { color: var(--text-primary); font-size: 1rem; font-weight: 600; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.5rem; }
   .section h3::before { content: ''; width: 3px; height: 16px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); border-radius: 2px; }
-  select, textarea { width: 100%; padding: 0.7rem 0.9rem; border: 2px solid var(--border-color); border-radius: 10px; font-size: 0.95rem; transition: all 0.3s ease; background: var(--bg-primary); color: var(--text-primary); }
+  select, textarea { width: 100%; padding: 0.7rem 0.9rem; border: 1px solid var(--border-color); border-radius: 12px; font-size: 0.95rem; transition: all 0.3s ease; background: var(--bg-primary); color: var(--text-primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15), 0 4px 8px rgba(0,0,0,0.1); }
+  select { background: linear-gradient(135deg, var(--bg-primary) 0%, rgba(102,126,234,0.02) 100%); cursor: pointer; }
+  select:hover { border-color: rgba(102,126,234,0.4); box-shadow: 0 4px 8px rgba(0,0,0,0.08); }
+  @media (max-width: 640px) {
+    select, textarea { padding: 1rem; font-size: 1rem; }
+  }
   select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); transform: translateY(-1px); }
   textarea { resize: vertical; min-height: 80px; font-family: inherit; line-height: 1.45; }
   /* Scope button styles to this page to avoid affecting nav */
@@ -39,6 +45,12 @@
   .index-page .toggle-group .toggle-btn:hover { background: rgba(102,126,234,.12); }
   .index-page .toggle-group .toggle-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(102,126,234,.25); }
   .index-page .toggle-group .toggle-btn.active { color: #fff; transform: translateY(-1px); }
+  
+  /* Mobile responsive toggle - swipe style */
+  @media (max-width: 640px) {
+    .index-page .toggle-group { width: 100%; max-width: 300px; margin: 0 auto; }
+    .index-page .toggle-group .toggle-btn { min-width: 0; flex: 1; padding: .75rem .5rem; font-size: .85rem; }
+  }
   /* Carousel for input sections */
   .index-page .input-carousel { overflow: hidden; transition: height .28s ease; }
   .index-page .input-track { display: flex; width: 200%; transition: transform .28s ease; will-change: transform; }
@@ -61,13 +73,7 @@
     #batchDownload.attention { animation: none; }
   }
   /* Compact batch dropzone */
-  #batchDropzone { padding: .6rem .8rem; }
-  #batchDropzone .dropzone-content { gap: .35rem; }
-  #batchDropzone .dropzone-icon { font-size: 1.2rem; }
-  #batchDropzone .dropzone-text { font-size: .9rem; }
-  #batchDropzone .dropzone-subtext { font-size: .75rem; }
-  #batchDropzone.has-file { border-color: var(--brand); background: rgba(102,126,234,.08); box-shadow: 0 0 0 3px rgba(102,126,234,.12); }
-  #batchDropzone.has-file #batchChosen { color: var(--brand); }
+  /* (Batch styles moved to dedicated page) */
   .audio-player { width: 100%; margin-top: 0.5rem; border-radius: 10px; display: none; background: rgba(102, 126, 234, 0.08); padding: .5rem; border: 1px solid rgba(102, 126, 234, 0.2); }
   .audio-player audio { width: 100%; border-radius: 8px; }
   .audio-controls { display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem; }
@@ -83,7 +89,7 @@
 </style>
 
 <div class="index-page">
-<h1 style="text-align: center; font-size: 1.6rem; font-weight: 700; margin-bottom: 0.35rem; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">AI Japanese Feedback</h1>
+<h1 style="text-align: center; font-size: 1.6rem; font-weight: 700; margin-bottom: 0.35rem; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Speak AI</h1>
 <p class="subtitle">Record audio, upload files, or enter text directly for AI-powered feedback analysis</p>
 
 <!-- Global model selection (applies to both batch and normal) -->
@@ -94,7 +100,7 @@
     <option value="gemini" {% if selected_provider == 'gemini' %}selected{% endif %}>Google Gemini (2.5-flash-lite)</option>
     <option value="bedrock" {% if selected_provider == 'bedrock' %}selected{% endif %}>AWS Bedrock (Nova Lite)</option>
   </select>
-  <div class="dropzone-subtext" style="margin-top:.3rem;">This selection controls both Batch Correction and the normal Audio/Text analysis.</div>
+  <div class="dropzone-subtext" style="margin-top:.3rem;">This selection controls the model used for audio/text analysis.</div>
   
 </div>
 
@@ -102,47 +108,7 @@
   <div class="error">{{ error }}</div>
 {% endif %}
 
-<div class="section">
-  <h3>📄 Batch Correction (CSV/Excel)</h3>
-  <form id="batchForm" action="{% url 'batch_create' %}" method="post" enctype="multipart/form-data" class="index-page">
-    {% csrf_token %}
-    <div id="batchDropzone" class="dropzone" onclick="document.getElementById('batchFile').click()" role="button" tabindex="0" aria-label="Upload CSV or Excel">
-      <div class="dropzone-content">
-        <div class="dropzone-icon">📑</div>
-        <div class="dropzone-text">Upload a CSV or Excel file</div>
-        <div class="dropzone-subtext">Takes column F (IncorrectText). Writes corrected_text → G, explanation (JSON) → H.</div>
-        <div id="batchChosen" class="dropzone-subtext" style="display:none; font-weight:700;"></div>
-      </div>
-    </div>
-    <input id="batchFile" name="batch_file" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none" />
-    <div id="batchSelected" style="display:none; margin-top:.5rem; color: var(--text-secondary);">
-      Selected: <span id="batchFileName" style="font-weight:700;"></span>
-      <button type="button" id="batchFileClear" class="btn btn-secondary" style="height:28px; padding:.2rem .6rem; margin-left:.5rem;">Clear</button>
-    </div>
-    <input type="hidden" id="batchProvider" name="provider" value="{{ selected_provider|default:'gemini' }}">
-    <div class="index-page btn-group" style="justify-content:flex-start;">
-      <button id="batchSubmit" type="submit" class="btn btn-primary">Process File</button>
-      <a class="btn btn-secondary" href="{% url 'batch_history' %}">Batch Jobs</a>
-    </div>
-  </form>
-  <div id="batchProgressWrap" style="display:none; margin-top:.75rem;">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.35rem;">
-      <div style="font-weight:700; color: var(--text-secondary);">Processing…</div>
-      <div id="batchPercent" style="color: var(--text-muted);">0%</div>
-    </div>
-    <div style="width:100%; height: 12px; background: rgba(102,126,234,.12); border-radius: 999px; overflow:hidden; border: 1px solid rgba(102,126,234,.25);">
-      <div id="batchProgressBar" style="height:100%; width:0%; background: linear-gradient(135deg, var(--brand), var(--brand-2)); transition: width .3s ease;"></div>
-    </div>
-    <div id="batchStatusText" style="margin-top:.4rem; color: var(--text-muted); font-size:.9rem;"></div>
-    <div class="index-page btn-group" style="justify-content:flex-start; align-items:center; gap:.35rem; margin-top:.5rem;">
-      <a id="batchDownload" class="btn btn-secondary" href="#" style="display:none;">Download Result</a>
-      <span id="batchNewBadge" class="badge-new" style="display:none;">New</span>
-      <button id="batchCancelBtn" type="button" class="btn btn-danger" style="display:none;">Cancel Job</button>
-      <a class="btn btn-secondary" href="{% url 'batch_history' %}">View History</a>
-    </div>
-  </div>
-  <div class="dropzone-subtext" style="margin-top:.4rem;">Tip: First row header "IncorrectText" is kept; results go to G/H.</div>
-</div>
+<!-- Batch Correction moved to its own page -->
 
 <form id="audio-form" method="post" action="{% url 'index' %}" enctype="multipart/form-data">
   {% csrf_token %}
@@ -454,7 +420,7 @@
 
     async function poll(jobId){
       try {
-        const res = await fetch(`/speak-ai/batch/${jobId}/status`, {
+        const res = await fetch(`/batch-correction/${jobId}/status`, {
           credentials: 'same-origin',
           headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         });
@@ -563,7 +529,7 @@
         if (!currentJobId) return;
         cancelBtn.disabled = true;
         try {
-          await fetch(`/speak-ai/batch/${currentJobId}/cancel`, {
+          await fetch(`/batch-correction/${currentJobId}/cancel`, {
             method: 'POST',
             headers: { 'X-CSRFToken': form.querySelector('input[name=csrfmiddlewaretoken]').value, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'

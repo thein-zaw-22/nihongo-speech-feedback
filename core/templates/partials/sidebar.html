@@ -1,6 +1,19 @@
 {% if user.is_authenticated %}
 {% load static %}
 <aside id="sidebar" class="sidebar" aria-label="Sidebar">
+  <div class="sidebar-header-bar">
+    <div class="sidebar-brand">🎯 AI Feedback</div>
+    <div class="sidebar-controls">
+      <button id="themeToggleSidebar" class="theme-toggle" aria-label="Toggle theme">
+        <img id="themeIconSidebar" src="{% static 'core/auto-icon.svg' %}" alt="Theme" width="20" height="20">
+      </button>
+      <button class="sidebar-close" id="sidebarCloseBtn" aria-label="Close sidebar">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
   <div class="sidebar-inner">
     
     <!-- Main Navigation -->
@@ -14,17 +27,14 @@
           <span class="icon"><img src="{% static 'core/home-icon.svg' %}" alt="" width="16" height="16"></span>
           <span class="label">Home</span>
         </a>
-        <a href="{% url 'index' %}" class="sidebar-link{% if request.resolver_match.url_name == 'index' %} active{% endif %}">
-          <span class="icon"><img src="{% static 'core/target-icon.svg' %}" alt="" width="16" height="16"></span>
-          <span class="label">AI Feedback</span>
-        </a>
-        <a href="{% url 'history' %}" class="sidebar-link{% if request.resolver_match.url_name == 'history' %} active{% endif %}">
-          <span class="icon"><img src="{% static 'core/history-icon.svg' %}" alt="" width="16" height="16"></span>
-          <span class="label">History</span>
+
+        <a href="{% url 'batch_correction' %}" class="sidebar-link{% if request.resolver_match.url_name == 'batch_correction' %} active{% endif %}">
+          <span class="icon"><img src="{% static 'core/batch-icon.svg' %}" alt="" width="16" height="16"></span>
+          <span class="label">Batch Correction</span>
         </a>
         <a href="{% url 'batch_history' %}" class="sidebar-link{% if request.resolver_match.url_name == 'batch_history' %} active{% endif %}">
-          <span class="icon"><img src="{% static 'core/batch-icon.svg' %}" alt="" width="16" height="16"></span>
-          <span class="label">Batch Process</span>
+          <span class="icon"><img src="{% static 'core/history-icon.svg' %}" alt="" width="16" height="16"></span>
+          <span class="label">Batch History</span>
         </a>
       </div>
     </div>
@@ -36,6 +46,14 @@
         <span class="sidebar-title">Practice</span>
       </button>
       <div id="sb-practice" class="sidebar-body">
+        <a href="{% url 'index' %}" class="sidebar-link{% if request.resolver_match.url_name == 'index' %} active{% endif %}">
+          <span class="icon"><img src="{% static 'core/target-icon.svg' %}" alt="" width="16" height="16"></span>
+          <span class="label">Speak AI</span>
+        </a>
+        <a href="{% url 'history' %}" class="sidebar-link{% if request.resolver_match.url_name == 'history' %} active{% endif %}">
+          <span class="icon"><img src="{% static 'core/history-icon.svg' %}" alt="" width="16" height="16"></span>
+          <span class="label">Speak AI History</span>
+        </a>
         <a href="{% url 'grammar_game' %}" class="sidebar-link{% if request.resolver_match.url_name == 'grammar_game' %} active{% endif %}">
           <span class="icon"><img src="{% static 'core/game-icon.svg' %}" alt="" width="16" height="16"></span>
           <span class="label">Grammar Game</span>

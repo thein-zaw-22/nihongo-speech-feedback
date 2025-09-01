@@ -60,8 +60,17 @@
     .btn-secondary:hover { background: rgba(102,126,234,.2); }
     .btn-danger { background: rgba(239,68,68,.12); color: #b91c1c; border: 1px solid rgba(239,68,68,.3); }
     .btn-danger:hover { background: rgba(239,68,68,.2); }
+    /* Backdrop for mobile drawer */
+    .sb-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; z-index: 1100; }
     /* Sidebar - GitHub Style Overlay */
-    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: var(--bg-primary); border-right:1px solid var(--border-color); padding:.75rem; padding-top: 64px; overflow:auto; transform: translateX(-100%); transition: transform .2s ease; z-index: 1050; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: var(--bg-primary); border-right:1px solid var(--border-color); padding:0; overflow:auto; transform: translateX(-100%); transition: transform .2s ease; z-index: 1200; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+    .sidebar-header-bar { display:flex; align-items:center; justify-content:space-between; padding:.5rem 1rem; min-height: 52px; border-bottom:1px solid var(--border-color); background: var(--bg-secondary); }
+    .sidebar-brand { font-weight: 800; font-size: 1rem; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .sidebar-controls { display:flex; align-items:center; gap:.5rem; }
+    .sidebar-close { background: transparent; border:none; cursor:pointer; padding: 6px; border-radius: 6px; transition: background-color 0.2s ease; color: var(--text-primary); }
+    .sidebar-close:hover { background: rgba(0,0,0,0.05); }
+    .sidebar-inner { padding:.75rem; }
+    [data-theme="dark"] .sidebar-close:hover { background: rgba(255,255,255,0.05); }
     .sidebar.open { transform: translateX(0); }
     .sidebar-inner { display:flex; flex-direction:column; gap:.75rem; }
     .sidebar-title { font-size:.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing:.06em; font-weight: 600; }
@@ -112,7 +121,7 @@
     /* Desktop and Mobile */
     .nav-burger { display: inline-flex; }
     @media (max-width: 900px) {
-      .sidebar { padding-top: 64px; }
+      .sidebar { padding-top: 0; }
     }
     /* Toasts */
     .toast-container { position: fixed; right: 16px; bottom: 16px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; }
@@ -152,6 +161,7 @@
 
   <div class="layout">
     {% include 'partials/sidebar.html' %}
+    <div id="sb-backdrop" class="sb-backdrop" aria-hidden="true"></div>
     <div class="content-wrap">
 
   <main class="container">
@@ -223,14 +233,20 @@
       const sidebar = document.getElementById('sidebar');
       const btn = document.getElementById('sidebarToggle');
       const collapseBtn = document.getElementById('sidebarCollapseBtn');
+      const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+      const themeToggleSidebar = document.getElementById('themeToggleSidebar');
+      const themeIconSidebar = document.getElementById('themeIconSidebar');
       const key = 'sidebar_open';
       const secKey = (name)=>`sbsec:${name}`;
+      const backdrop = document.getElementById('sb-backdrop');
       function setOpen(open){
         if (!sidebar) return;
         sidebar.classList.toggle('open', open);
         if (btn) btn.setAttribute('aria-expanded', String(open));
         if (collapseBtn) collapseBtn.style.display = open ? 'inline-flex' : 'none';
         btn.style.display = open ? 'none' : 'inline-flex';
+        if (backdrop) backdrop.style.display = open ? 'block' : 'none';
+        document.body.style.overflow = open ? 'hidden' : '';
         try { localStorage.setItem(key, open ? '1':'0'); } catch(e){}
       }
       if (btn){ btn.addEventListener('click', ()=>{
@@ -240,6 +256,41 @@
       if (collapseBtn){ collapseBtn.addEventListener('click', ()=>{
         setOpen(false);
       }); }
+      if (sidebarCloseBtn){ sidebarCloseBtn.addEventListener('click', ()=>{
+        setOpen(false);
+      }); }
+      // Sync sidebar theme toggle with main theme toggle
+      if (themeToggleSidebar && themeIconSidebar) {
+        const saved = localStorage.getItem('theme') || 'system';
+        const icons = {
+          system: '/static/core/auto-icon.svg',
+          light: '/static/core/sun-icon.svg',
+          dark: '/static/core/moon-icon.svg'
+        };
+        themeIconSidebar.src = icons[saved] || icons.system;
+        
+        themeToggleSidebar.addEventListener('click', () => {
+          const themes = ['system', 'light', 'dark'];
+          const current = localStorage.getItem('theme') || 'system';
+          const next = themes[(themes.indexOf(current) + 1) % themes.length];
+          
+          if (next === 'system') localStorage.removeItem('theme');
+          else localStorage.setItem('theme', next);
+          
+          // Apply theme
+          if (next === 'system') {
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            root.setAttribute('data-theme', systemDark ? 'dark' : 'light');
+          } else {
+            root.setAttribute('data-theme', next);
+          }
+          
+          // Update both icons
+          themeIconSidebar.src = icons[next] || icons.system;
+          const mainIcon = document.getElementById('themeIcon');
+          if (mainIcon) mainIcon.src = icons[next] || icons.system;
+        });
+      }
       // Start closed by default for overlay
       setOpen(false);
       // Collapsible sections
@@ -260,11 +311,15 @@
           });
         }
       });
-      // Close drawer when clicking outside on mobile
+      // Close drawer when clicking outside on mobile or on backdrop
       document.addEventListener('click', (e)=>{
         if (!sidebar) return; if (!window.matchMedia('(max-width: 900px)').matches) return;
-        if (!sidebar.contains(e.target) && e.target !== btn){ sidebar.classList.remove('open'); if (btn) btn.setAttribute('aria-expanded','false'); }
+        const clickInsideBurger = btn && btn.contains(e.target);
+        if (!sidebar.contains(e.target) && !clickInsideBurger){ setOpen(false); }
       });
+      if (backdrop){ backdrop.addEventListener('click', ()=> setOpen(false)); }
+      // Keep sidebar open when selecting a link on mobile (requested)
+      // If you ever want to auto-close on selection, re-enable the handler above.
     })();
 
     // If not authenticated, clear sidebar state and ensure collapsed

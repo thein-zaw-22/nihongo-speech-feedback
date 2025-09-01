@@ -20,6 +20,7 @@ from django.contrib import messages as dj_messages
 from .forms import AudioUploadForm, ProfileForm, ProfileAvatarForm, PasswordUpdateForm
 from django.http import HttpResponse, JsonResponse, Http404
 from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
 import threading
 import io
 import csv
@@ -809,6 +810,11 @@ def batch_create(request):
         raise Http404
     upload = request.FILES.get('batch_file')
     provider = request.POST.get('provider') or request.session.get('llm_provider') or LLM_PROVIDER
+    # Persist provider selection like speak-ai
+    try:
+        request.session['llm_provider'] = provider
+    except Exception:
+        pass
     if not upload:
         # If normal form post, bounce back with message
         if 'application/json' in (request.headers.get('Accept') or '') or request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -842,7 +848,7 @@ def batch_status(request, pk: int):
         'percent': job.progress_percent,
         'error': job.error_message,
         'cancelable': job.status in ('pending','running') and not job.cancel_requested,
-        'download_url': (None if job.status != 'done' else f"/speak-ai/batch/{job.id}/download"),
+        'download_url': (None if job.status != 'done' else f"/batch-correction/{job.id}/download"),
     })
 
 
@@ -890,8 +896,60 @@ def batch_cancel(request, pk: int):
 
 @login_required
 def batch_history(request):
-    jobs = BatchJob.objects.filter(user=request.user).order_by('-created_at')[:50]
-    return render(request, 'batch_history.html', {'jobs': jobs})
+    jobs_qs = BatchJob.objects.filter(user=request.user).order_by('-created_at')
+    # Optional date filtering (same logic as /history)
+    start_str = request.GET.get('start')
+    end_str = request.GET.get('end')
+    tz = timezone.get_current_timezone()
+    start_dt = end_dt = None
+    try:
+        if start_str:
+            d = dt_datetime.strptime(start_str, '%Y-%m-%d').date()
+            start_dt = timezone.make_aware(dt_datetime.combine(d, dt_time.min), tz)
+    except Exception:
+        start_str = None
+    try:
+        if end_str:
+            d = dt_datetime.strptime(end_str, '%Y-%m-%d').date()
+            end_dt = timezone.make_aware(dt_datetime.combine(d, dt_time.max), tz)
+    except Exception:
+        end_str = None
+    if start_dt and end_dt and end_dt < start_dt:
+        messages.error(request, 'End date cannot be earlier than start date.')
+        jobs_qs = jobs_qs.none()
+    else:
+        if start_dt:
+            jobs_qs = jobs_qs.filter(created_at__gte=start_dt)
+        if end_dt:
+            jobs_qs = jobs_qs.filter(created_at__lte=end_dt)
+
+    # Pagination with selectable page size
+    page_num = request.GET.get('page') or '1'
+    try:
+        page_num = int(page_num)
+    except Exception:
+        page_num = 1
+    # page_size: default 10, max 100
+    page_size = request.GET.get('page_size') or '10'
+    try:
+        page_size = max(1, min(int(page_size), 100))
+    except Exception:
+        page_size = 10
+    paginator = Paginator(jobs_qs, page_size)
+    page_obj = paginator.get_page(page_num)
+    return render(request, 'batch_history.html', {
+        'jobs': page_obj.object_list,
+        'page_obj': page_obj,
+        'start': start_str or '',
+        'end': end_str or '',
+        'page_size': page_size,
+    })
+
+
+@login_required
+def batch_correction(request):
+    selected_provider = request.session.get('llm_provider', 'gemini')
+    return render(request, 'batch_correction.html', {'selected_provider': selected_provider})
 
 
 @login_required
